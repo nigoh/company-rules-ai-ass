@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import { useKV } from '@github/spark/hooks'
-import { Search, MessageCircle, Book, Settings, User, Plus, Edit2, Trash2, Send, SignIn, Check, X, Clock, Eye, UserCheck, Sparkle, FileText, Lightbulb, Database, Cpu } from '@phosphor-icons/react'
+import { MagnifyingGlass as Search, ChatCircle as MessageCircle, Book, Gear as Settings, User, Plus, PencilSimple as Edit2, Trash, PaperPlaneTilt as Send, SignIn, Check, X, Clock, Eye, UserCheck, Sparkle, FileText, Lightbulb, Database, Cpu } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { LoginDialog } from '@/components/auth/LoginDialog'
 import { UserProfile } from '@/components/auth/UserProfile'
@@ -614,11 +614,11 @@ function App() {
     setActiveAdminTab(value as any)
   }
 
-  const permissions = usePermissions(currentUser)
+  const permissions = usePermissions(currentUser || null)
 
   const categories = ['all', '勤務', '休暇', '服装', '給与', '福利厚生']
 
-  const filteredRules = rules.filter(rule => {
+  const filteredRules = (rules || []).filter(rule => {
     // Only show published rules in search view
     if (rule.status !== 'published') return false
     
@@ -629,8 +629,8 @@ function App() {
     return matchesSearch && matchesCategory
   })
 
-  const pendingRules = rules.filter(rule => rule.status === 'pending')
-  const publishedRules = rules.filter(rule => rule.status === 'published')
+  const pendingRules = (rules || []).filter(rule => rule.status === 'pending')
+  const publishedRules = (rules || []).filter(rule => rule.status === 'published')
 
   const handleSearch = (query: string) => {
     setSearchQuery(query)
@@ -651,14 +651,14 @@ function App() {
       timestamp: new Date().toISOString()
     }
 
-    setChatMessages(current => [...current, userMessage])
+    setChatMessages(current => [...(current || []), userMessage])
     setIsLoading(true)
     const currentInput = chatInput
     setChatInput('')
 
     try {
       // Get conversation history for context
-      const recentHistory = chatMessages.slice(-6).map(msg => 
+      const recentHistory = (chatMessages || []).slice(-6).map(msg => 
         `${msg.type === 'user' ? 'ユーザー' : 'AI'}: ${msg.content}`
       ).join('\n')
 
@@ -677,7 +677,7 @@ function App() {
           content: rule.content,
           lastUpdated: rule.lastUpdated
         })),
-        faqs: faqs.map(faq => ({
+        faqs: (faqs || []).map(faq => ({
           category: faq.category,
           question: faq.question,
           answer: faq.answer
@@ -696,7 +696,7 @@ function App() {
         - 専門分野: 労務管理、人事制度、法的コンプライアンス
 
         ## 回答スタイル設定
-        ${personalityInstructions[chatPersonality]}
+        ${personalityInstructions[chatPersonality || 'professional']}
 
         ## 会話履歴（文脈理解用）
         ${recentHistory ? `過去の会話:\n${recentHistory}\n` : ''}
@@ -773,7 +773,7 @@ function App() {
         timestamp: new Date().toISOString()
       }
 
-      setChatMessages(current => [...current, aiMessage])
+      setChatMessages(current => [...(current || []), aiMessage])
       
       // AI応答の品質を記録（将来の改善のため）
       const interactionLog = {
@@ -797,7 +797,7 @@ function App() {
         content: '申し訳ございません。現在AIシステムに問題が発生しています。しばらく時間をおいてから再度お試しください。緊急の場合は人事部まで直接お問い合わせください。',
         timestamp: new Date().toISOString()
       }
-      setChatMessages(current => [...current, errorMessage])
+      setChatMessages(current => [...(current || []), errorMessage])
       toast.error('AIからの回答を取得できませんでした')
     } finally {
       setIsLoading(false)
@@ -826,7 +826,7 @@ function App() {
       submittedAt: new Date().toISOString()
     }
 
-    setRules(current => [...current, rule])
+    setRules(current => [...(current || []), rule])
     setNewRule({ title: '', content: '', category: '' })
     
     if (currentUser.role === 'admin') {
@@ -839,7 +839,7 @@ function App() {
   const handleUpdateRule = () => {
     if (!editingRule || !currentUser) return
 
-    setRules(current => current.map(rule => 
+    setRules(current => (current || []).map(rule => 
       rule.id === editingRule.id 
         ? { 
             ...editingRule, 
@@ -865,7 +865,7 @@ function App() {
       return
     }
 
-    setRules(current => current.map(rule => 
+    setRules(current => (current || []).map(rule => 
       rule.id === ruleId 
         ? { 
             ...rule, 
@@ -891,7 +891,7 @@ function App() {
       return
     }
 
-    setRules(current => current.map(rule => 
+    setRules(current => (current || []).map(rule => 
       rule.id === ruleId 
         ? { 
             ...rule, 
@@ -917,7 +917,7 @@ function App() {
     try {
       const suggestions = await openaiService.generateQuestionSuggestions(
         input,
-        chatMessages,
+        chatMessages || [],
         currentUser || { role: 'employee', name: 'Guest', email: 'guest@example.com' },
         publishedRules
       )
@@ -933,10 +933,10 @@ function App() {
 
   // AI応答の要約機能
   const generateConversationSummary = async () => {
-    if (chatMessages.length < 4) return
+    if ((chatMessages || []).length < 4) return
 
     try {
-      const conversation = chatMessages.map(msg => 
+      const conversation = (chatMessages || []).map(msg => 
         `${msg.type === 'user' ? 'ユーザー' : 'AI'}: ${msg.content}`
       ).join('\n')
 
@@ -977,7 +977,7 @@ function App() {
         timestamp: new Date().toISOString()
       }
 
-      setChatMessages(current => [...current, summaryMessage])
+      setChatMessages(current => [...(current || []), summaryMessage])
       
       // 要約をログとして保存
       const summaryLog = {
@@ -985,7 +985,7 @@ function App() {
         type: 'conversation_summary',
         content: summary,
         timestamp: new Date().toISOString(),
-        messageCount: chatMessages.length
+        messageCount: (chatMessages || []).length
       }
       
       const logs = await spark.kv.get<any[]>('ai-interaction-logs') || []
@@ -1012,7 +1012,7 @@ function App() {
   }
 
   const handleDeleteRule = (id: string) => {
-    setRules(current => current.filter(rule => rule.id !== id))
+    setRules(current => (current || []).filter(rule => rule.id !== id))
     toast.success('規則を削除しました')
   }
 
@@ -1209,7 +1209,7 @@ function App() {
 
           <TabsContent value="chat" className="space-y-6">
             <ProtectedRoute
-              user={currentUser}
+              user={currentUser || null}
               allowedRoles={['admin', 'hr', 'employee']}
               fallback={
                 <Card>
@@ -1236,7 +1236,7 @@ function App() {
                       <CardDescription>
                         会社の規則について質問してください。AIが適切な回答を提供します。
                         <span className="block text-xs mt-1 text-primary">
-                          📚 現在{publishedRules.length}件の規則と{faqs.length}件のFAQを参照可能
+                          📚 現在{publishedRules.length}件の規則と{(faqs || []).length}件のFAQを参照可能
                         </span>
                       </CardDescription>
                     </div>
@@ -1250,7 +1250,7 @@ function App() {
                         <option value="friendly">親しみやすい</option>
                         <option value="detailed">詳細</option>
                       </select>
-                      {chatMessages.length >= 4 && (
+                      {(chatMessages || []).length >= 4 && (
                         <Button
                           onClick={generateConversationSummary}
                           variant="outline"
@@ -1265,7 +1265,7 @@ function App() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="h-96 overflow-y-auto space-y-4 p-4 border rounded-lg bg-secondary/50">
-                    {chatMessages.length === 0 && (
+                    {(chatMessages || []).length === 0 && (
                       <div className="text-center text-muted-foreground py-8">
                         <Lightbulb size={48} className="mx-auto mb-4 opacity-50" />
                         <p className="mb-2">AIに何でも質問してください</p>
@@ -1276,7 +1276,7 @@ function App() {
                         </div>
                       </div>
                     )}
-                    {chatMessages.map(message => (
+                    {(chatMessages || []).map(message => (
                       <div
                         key={message.id}
                         className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
@@ -1385,7 +1385,7 @@ function App() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {faqs.map(faq => (
+                {(faqs || []).map(faq => (
                   <div key={faq.id} className="space-y-2">
                     <div className="flex items-center gap-2">
                       <Badge variant="outline">{faq.category}</Badge>
@@ -1403,7 +1403,7 @@ function App() {
 
           <TabsContent value="admin" className="space-y-6">
             <ProtectedRoute
-              user={currentUser}
+              user={currentUser || null}
               allowedRoles={['admin', 'hr']}
               fallback={
                 <Card>
@@ -1575,7 +1575,7 @@ function App() {
                                         variant="destructive"
                                         size="sm"
                                       >
-                                        <Trash2 size={14} />
+                                        <Trash size={14} />
                                       </Button>
                                     )}
                                   </div>
@@ -1867,9 +1867,9 @@ function App() {
                                   状態確認
                                 </Button>
                                 <div className="text-xs text-muted-foreground space-y-1">
-                                  <p>• 規則: {rules.length}件</p>
-                                  <p>• チャット履歴: {chatMessages.length}件</p>
-                                  <p>• FAQ: {faqs.length}件</p>
+                                  <p>• 規則: {(rules || []).length}件</p>
+                                  <p>• チャット履歴: {(chatMessages || []).length}件</p>
+                                  <p>• FAQ: {(faqs || []).length}件</p>
                                 </div>
                               </CardContent>
                             </Card>

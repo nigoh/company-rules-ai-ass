@@ -580,12 +580,12 @@ export class DatabaseService {
       const [rules, users, conversations, messages, logs, analytics, notifications, config] = await Promise.all([
         this.getRules(),
         this.getUsers(),
-        spark.kv.get<Conversation[]>(this.KEYS.CONVERSATIONS) || [],
-        spark.kv.get<ChatMessage[]>(this.KEYS.MESSAGES) || [],
+        spark.kv.get<Conversation[]>(this.KEYS.CONVERSATIONS).then(result => result || []),
+        spark.kv.get<ChatMessage[]>(this.KEYS.MESSAGES).then(result => result || []),
         this.getInteractionLogs(),
         this.getAnalytics(30),
-        spark.kv.get<Notification[]>(this.KEYS.NOTIFICATIONS) || [],
-        spark.kv.get<SystemConfig[]>(this.KEYS.SYSTEM_CONFIG) || []
+        spark.kv.get<Notification[]>(this.KEYS.NOTIFICATIONS).then(result => result || []),
+        spark.kv.get<SystemConfig[]>(this.KEYS.SYSTEM_CONFIG).then(result => result || [])
       ])
 
       return {

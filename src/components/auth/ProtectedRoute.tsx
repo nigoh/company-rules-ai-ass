@@ -1,6 +1,6 @@
 import { ReactNode } from 'react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { ShieldX } from '@phosphor-icons/react'
+import { Shield as ShieldX } from '@phosphor-icons/react'
 
 interface UserInfo {
   email: string

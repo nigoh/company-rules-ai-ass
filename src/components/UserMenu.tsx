@@ -8,7 +8,7 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from '@/components/ui/dropdown-menu'
-import { User, SignOut, Settings, Crown } from '@phosphor-icons/react'
+import { User, SignOut, Gear as Settings, Crown } from '@phosphor-icons/react'
 
 interface UserMenuProps {
   user: {
