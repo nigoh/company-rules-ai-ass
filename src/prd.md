@@ -30,7 +30,16 @@
 - **Rule Search & Discovery**: Full-text search with category filtering
 - **Rule Display**: Clean, organized presentation of company policies
 - **Administrative Management**: Add, edit, delete rules (Admin/HR only)
+- **Approval Workflow**: HR submissions require admin approval before publication
+- **Status Management**: Published, pending, and rejected rule states
 - **Categorization**: Organized by department/topic for easy navigation
+
+### Rule Approval System
+- **Submission Queue**: Pending rules await admin approval
+- **Review Interface**: Admin can approve/reject with comments
+- **Status Tracking**: Clear visibility of submission status
+- **Notification System**: Visual indicators for pending approvals
+- **Audit Trail**: Track who submitted and reviewed each rule
 
 ### AI-Powered Question Answering
 - **Intelligent Responses**: Context-aware AI assistant for policy questions
@@ -48,17 +57,20 @@
 ### Admin (管理者)
 - Full system access
 - Manage all rules and FAQ content
+- Approve/reject HR rule submissions
+- Delete published rules
 - User management capabilities
 - System configuration access
 
 ### HR (人事部)
-- Manage company rules and policies
+- Create and edit company rules (requires admin approval)
 - Update FAQ content
 - Access to AI question system
-- View all employee interactions
+- View published rules and own submissions
+- Cannot delete rules or approve submissions
 
 ### Employee (一般社員)
-- View company rules and policies
+- View published company rules and policies
 - Search and filter capabilities
 - Access AI question system
 - View FAQ content

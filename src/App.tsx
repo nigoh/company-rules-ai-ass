@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import { useKV } from '@github/spark/hooks'
-import { Search, MessageCircle, Book, Settings, User, Plus, Edit2, Trash2, Send, SignIn } from '@phosphor-icons/react'
+import { Search, MessageCircle, Book, Settings, User, Plus, Edit2, Trash2, Send, SignIn, Check, X, Clock, Eye, UserCheck } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { LoginDialog } from '@/components/auth/LoginDialog'
 import { UserProfile } from '@/components/auth/UserProfile'
@@ -19,6 +19,12 @@ interface Rule {
   content: string
   category: string
   lastUpdated: string
+  status: 'published' | 'pending' | 'rejected'
+  submittedBy?: string
+  submittedAt?: string
+  reviewedBy?: string
+  reviewedAt?: string
+  reviewComment?: string
 }
 
 interface FAQ {
@@ -48,21 +54,24 @@ function App() {
       title: '勤務時間に関する規則',
       content: '標準勤務時間は9:00-18:00（休憩1時間含む）です。フレックスタイム制を採用しており、コアタイム10:00-15:00を除き、8:00-20:00の間で勤務時間を調整できます。',
       category: '勤務',
-      lastUpdated: '2024-01-15'
+      lastUpdated: '2024-01-15',
+      status: 'published'
     },
     {
       id: '2', 
       title: '有給休暇の取得について',
       content: '有給休暇は入社日から6ヶ月経過後に付与されます。取得時は3営業日前までに申請が必要です。年次有給休暇の取得促進のため、計画的付与制度を導入しています。',
       category: '休暇',
-      lastUpdated: '2024-01-10'
+      lastUpdated: '2024-01-10',
+      status: 'published'
     },
     {
       id: '3',
       title: '服装規定',
       content: 'ビジネスカジュアルを基本とします。お客様との面談がある日はスーツ着用を推奨します。安全上の理由から、サンダルでの勤務は禁止です。',
       category: '服装',
-      lastUpdated: '2024-01-05'
+      lastUpdated: '2024-01-05',
+      status: 'published'
     }
   ])
 
@@ -91,18 +100,34 @@ function App() {
   const [editingRule, setEditingRule] = useState<Rule | null>(null)
   const [newRule, setNewRule] = useState({ title: '', content: '', category: '' })
   const [showLoginDialog, setShowLoginDialog] = useState(false)
+  const [activeAdminTab, setActiveAdminTab] = useState<'add' | 'manage' | 'pending'>('add')
+  const [reviewComment, setReviewComment] = useState('')
+
+  // Reset admin tab for HR users who don't have access to pending
+  const handleAdminTabChange = (value: string) => {
+    if (value === 'pending' && currentUser?.role !== 'admin') {
+      return // Don't allow HR users to access pending tab
+    }
+    setActiveAdminTab(value as any)
+  }
 
   const permissions = usePermissions(currentUser)
 
   const categories = ['all', '勤務', '休暇', '服装', '給与', '福利厚生']
 
   const filteredRules = rules.filter(rule => {
+    // Only show published rules in search view
+    if (rule.status !== 'published') return false
+    
     const matchesSearch = searchQuery === '' || 
       rule.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       rule.content.toLowerCase().includes(searchQuery.toLowerCase())
     const matchesCategory = selectedCategory === 'all' || rule.category === selectedCategory
     return matchesSearch && matchesCategory
   })
+
+  const pendingRules = rules.filter(rule => rule.status === 'pending')
+  const publishedRules = rules.filter(rule => rule.status === 'published')
 
   const handleSearch = (query: string) => {
     setSearchQuery(query)
@@ -132,7 +157,7 @@ function App() {
         あなたは会社の人事部のAIアシスタントです。以下の会社規則に基づいて質問に答えてください。
 
         会社規則:
-        ${rules.map(rule => `${rule.title}: ${rule.content}`).join('\n')}
+        ${publishedRules.map(rule => `${rule.title}: ${rule.content}`).join('\n')}
 
         FAQ:
         ${faqs.map(faq => `Q: ${faq.question}\nA: ${faq.answer}`).join('\n')}
@@ -165,29 +190,100 @@ function App() {
       return
     }
 
+    if (!currentUser) {
+      toast.error('ログインが必要です')
+      return
+    }
+
     const rule: Rule = {
       id: Date.now().toString(),
       title: newRule.title,
       content: newRule.content,
       category: newRule.category,
-      lastUpdated: new Date().toISOString().split('T')[0]
+      lastUpdated: new Date().toISOString().split('T')[0],
+      status: currentUser.role === 'admin' ? 'published' : 'pending',
+      submittedBy: currentUser.name,
+      submittedAt: new Date().toISOString()
     }
 
     setRules(current => [...current, rule])
     setNewRule({ title: '', content: '', category: '' })
-    toast.success('規則を追加しました')
+    
+    if (currentUser.role === 'admin') {
+      toast.success('規則を公開しました')
+    } else {
+      toast.success('規則を承認待ちリストに追加しました')
+    }
   }
 
   const handleUpdateRule = () => {
-    if (!editingRule) return
+    if (!editingRule || !currentUser) return
 
     setRules(current => current.map(rule => 
       rule.id === editingRule.id 
-        ? { ...editingRule, lastUpdated: new Date().toISOString().split('T')[0] }
+        ? { 
+            ...editingRule, 
+            lastUpdated: new Date().toISOString().split('T')[0],
+            status: currentUser.role === 'admin' ? 'published' : 'pending',
+            submittedBy: editingRule.submittedBy || currentUser.name,
+            submittedAt: editingRule.submittedAt || new Date().toISOString()
+          }
         : rule
     ))
     setEditingRule(null)
-    toast.success('規則を更新しました')
+    
+    if (currentUser.role === 'admin') {
+      toast.success('規則を更新しました')
+    } else {
+      toast.success('規則の変更を承認待ちリストに追加しました')
+    }
+  }
+
+  const handleApproveRule = (ruleId: string) => {
+    if (!currentUser || currentUser.role !== 'admin') {
+      toast.error('承認権限がありません')
+      return
+    }
+
+    setRules(current => current.map(rule => 
+      rule.id === ruleId 
+        ? { 
+            ...rule, 
+            status: 'published',
+            reviewedBy: currentUser.name,
+            reviewedAt: new Date().toISOString(),
+            reviewComment: reviewComment || undefined
+          }
+        : rule
+    ))
+    setReviewComment('')
+    toast.success('規則を承認・公開しました')
+  }
+
+  const handleRejectRule = (ruleId: string) => {
+    if (!currentUser || currentUser.role !== 'admin') {
+      toast.error('承認権限がありません')
+      return
+    }
+
+    if (!reviewComment.trim()) {
+      toast.error('却下理由を入力してください')
+      return
+    }
+
+    setRules(current => current.map(rule => 
+      rule.id === ruleId 
+        ? { 
+            ...rule, 
+            status: 'rejected',
+            reviewedBy: currentUser.name,
+            reviewedAt: new Date().toISOString(),
+            reviewComment: reviewComment
+          }
+        : rule
+    ))
+    setReviewComment('')
+    toast.success('規則を却下しました')
   }
 
   const handleLogout = () => {
@@ -256,6 +352,11 @@ function App() {
             >
               <Settings size={16} />
               管理
+              {currentUser?.role === 'admin' && pendingRules.length > 0 && (
+                <Badge variant="destructive" className="ml-1 text-xs">
+                  {pendingRules.length}
+                </Badge>
+              )}
               {!permissions.canViewAdmin && <span className="text-xs">(権限不足)</span>}
             </TabsTrigger>
           </TabsList>
@@ -439,122 +540,246 @@ function App() {
                     {currentUser && (
                       <span className="block mt-1 text-xs">
                         現在のアクセス権限: {currentUser.role === 'admin' ? '管理者' : '人事部'}
+                        {currentUser.role === 'hr' && (
+                          <span className="text-orange-600 ml-2">※ 人事部の投稿は管理者の承認が必要です</span>
+                        )}
                       </span>
                     )}
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-medium">新しい規則を追加</h3>
-                    <div className="grid gap-4">
-                      <Input
-                        placeholder="規則のタイトル"
-                        value={newRule.title}
-                        onChange={(e) => setNewRule(prev => ({ ...prev, title: e.target.value }))}
-                      />
-                      <select
-                        value={newRule.category}
-                        onChange={(e) => setNewRule(prev => ({ ...prev, category: e.target.value }))}
-                        className="px-3 py-2 border border-input rounded-md bg-background"
-                      >
-                        <option value="">カテゴリを選択</option>
-                        {categories.slice(1).map(category => (
-                          <option key={category} value={category}>{category}</option>
-                        ))}
-                      </select>
-                      <Textarea
-                        placeholder="規則の内容"
-                        value={newRule.content}
-                        onChange={(e) => setNewRule(prev => ({ ...prev, content: e.target.value }))}
-                        rows={4}
-                      />
-                      <Button onClick={handleAddRule} className="w-fit">
-                        <Plus size={16} className="mr-2" />
-                        規則を追加
-                      </Button>
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-medium">既存の規則</h3>
-                    {rules.map(rule => (
-                      <Card key={rule.id}>
-                        <CardContent className="pt-6">
-                          {editingRule?.id === rule.id ? (
-                            <div className="space-y-4">
-                              <Input
-                                value={editingRule.title}
-                                onChange={(e) => setEditingRule(prev => 
-                                  prev ? { ...prev, title: e.target.value } : prev
-                                )}
-                              />
-                              <select
-                                value={editingRule.category}
-                                onChange={(e) => setEditingRule(prev => 
-                                  prev ? { ...prev, category: e.target.value } : prev
-                                )}
-                                className="w-full px-3 py-2 border border-input rounded-md bg-background"
-                              >
-                                {categories.slice(1).map(category => (
-                                  <option key={category} value={category}>{category}</option>
-                                ))}
-                              </select>
-                              <Textarea
-                                value={editingRule.content}
-                                onChange={(e) => setEditingRule(prev => 
-                                  prev ? { ...prev, content: e.target.value } : prev
-                                )}
-                                rows={4}
-                              />
-                              <div className="flex gap-2">
-                                <Button onClick={handleUpdateRule} size="sm">
-                                  保存
-                                </Button>
-                                <Button 
-                                  onClick={() => setEditingRule(null)} 
-                                  variant="outline" 
-                                  size="sm"
-                                >
-                                  キャンセル
-                                </Button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div>
-                              <div className="flex items-start justify-between mb-2">
-                                <div>
-                                  <h4 className="font-medium">{rule.title}</h4>
-                                  <Badge variant="secondary" className="mt-1">{rule.category}</Badge>
-                                </div>
-                                <div className="flex gap-2">
-                                  <Button
-                                    onClick={() => setEditingRule(rule)}
-                                    variant="outline"
-                                    size="sm"
-                                  >
-                                    <Edit2 size={14} />
-                                  </Button>
-                                  <Button
-                                    onClick={() => handleDeleteRule(rule.id)}
-                                    variant="destructive"
-                                    size="sm"
-                                  >
-                                    <Trash2 size={14} />
-                                  </Button>
-                                </div>
-                              </div>
-                              <p className="text-sm text-muted-foreground">{rule.content}</p>
-                              <p className="text-xs text-muted-foreground mt-2">
-                                更新日: {rule.lastUpdated}
-                              </p>
-                            </div>
+                <CardContent>
+                  <Tabs value={activeAdminTab} onValueChange={handleAdminTabChange}>
+                    <TabsList className={`grid w-full ${currentUser?.role === 'admin' ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                      <TabsTrigger value="add" className="flex items-center gap-2">
+                        <Plus size={16} />
+                        新規作成
+                      </TabsTrigger>
+                      <TabsTrigger value="manage" className="flex items-center gap-2">
+                        <Eye size={16} />
+                        公開中の規則
+                      </TabsTrigger>
+                      {currentUser?.role === 'admin' && (
+                        <TabsTrigger value="pending" className="flex items-center gap-2">
+                          <Clock size={16} />
+                          承認待ち
+                          {pendingRules.length > 0 && (
+                            <Badge variant="destructive" className="ml-1 text-xs">
+                              {pendingRules.length}
+                            </Badge>
                           )}
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
+                        </TabsTrigger>
+                      )}
+                    </TabsList>
+
+                    <TabsContent value="add" className="space-y-4 mt-6">
+                      <h3 className="text-lg font-medium">新しい規則を追加</h3>
+                      <div className="grid gap-4">
+                        <Input
+                          placeholder="規則のタイトル"
+                          value={newRule.title}
+                          onChange={(e) => setNewRule(prev => ({ ...prev, title: e.target.value }))}
+                        />
+                        <select
+                          value={newRule.category}
+                          onChange={(e) => setNewRule(prev => ({ ...prev, category: e.target.value }))}
+                          className="px-3 py-2 border border-input rounded-md bg-background"
+                        >
+                          <option value="">カテゴリを選択</option>
+                          {categories.slice(1).map(category => (
+                            <option key={category} value={category}>{category}</option>
+                          ))}
+                        </select>
+                        <Textarea
+                          placeholder="規則の内容"
+                          value={newRule.content}
+                          onChange={(e) => setNewRule(prev => ({ ...prev, content: e.target.value }))}
+                          rows={4}
+                        />
+                        <Button onClick={handleAddRule} className="w-fit">
+                          <Plus size={16} className="mr-2" />
+                          {currentUser?.role === 'admin' ? '規則を公開' : '規則を申請'}
+                        </Button>
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="manage" className="space-y-4 mt-6">
+                      <h3 className="text-lg font-medium">公開中の規則</h3>
+                      {publishedRules.map(rule => (
+                        <Card key={rule.id}>
+                          <CardContent className="pt-6">
+                            {editingRule?.id === rule.id ? (
+                              <div className="space-y-4">
+                                <Input
+                                  value={editingRule.title}
+                                  onChange={(e) => setEditingRule(prev => 
+                                    prev ? { ...prev, title: e.target.value } : prev
+                                  )}
+                                />
+                                <select
+                                  value={editingRule.category}
+                                  onChange={(e) => setEditingRule(prev => 
+                                    prev ? { ...prev, category: e.target.value } : prev
+                                  )}
+                                  className="w-full px-3 py-2 border border-input rounded-md bg-background"
+                                >
+                                  {categories.slice(1).map(category => (
+                                    <option key={category} value={category}>{category}</option>
+                                  ))}
+                                </select>
+                                <Textarea
+                                  value={editingRule.content}
+                                  onChange={(e) => setEditingRule(prev => 
+                                    prev ? { ...prev, content: e.target.value } : prev
+                                  )}
+                                  rows={4}
+                                />
+                                <div className="flex gap-2">
+                                  <Button onClick={handleUpdateRule} size="sm">
+                                    {currentUser?.role === 'admin' ? '保存' : '変更申請'}
+                                  </Button>
+                                  <Button 
+                                    onClick={() => setEditingRule(null)} 
+                                    variant="outline" 
+                                    size="sm"
+                                  >
+                                    キャンセル
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div>
+                                <div className="flex items-start justify-between mb-2">
+                                  <div>
+                                    <h4 className="font-medium">{rule.title}</h4>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <Badge variant="secondary">{rule.category}</Badge>
+                                      <Badge variant="outline" className="text-green-600 border-green-200">
+                                        公開中
+                                      </Badge>
+                                    </div>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <Button
+                                      onClick={() => setEditingRule(rule)}
+                                      variant="outline"
+                                      size="sm"
+                                    >
+                                      <Edit2 size={14} />
+                                    </Button>
+                                    {currentUser?.role === 'admin' && (
+                                      <Button
+                                        onClick={() => handleDeleteRule(rule.id)}
+                                        variant="destructive"
+                                        size="sm"
+                                      >
+                                        <Trash2 size={14} />
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                                <p className="text-sm text-muted-foreground mb-2">{rule.content}</p>
+                                <div className="text-xs text-muted-foreground space-y-1">
+                                  <p>更新日: {rule.lastUpdated}</p>
+                                  {rule.submittedBy && (
+                                    <p>作成者: {rule.submittedBy}</p>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </TabsContent>
+
+                    {currentUser?.role === 'admin' && (
+                      <TabsContent value="pending" className="space-y-4 mt-6">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-lg font-medium">承認待ちの規則</h3>
+                          {pendingRules.length > 0 && (
+                            <Badge variant="secondary">
+                              {pendingRules.length}件の申請
+                            </Badge>
+                          )}
+                        </div>
+                        
+                        {pendingRules.length === 0 ? (
+                          <Card>
+                            <CardContent className="pt-6 text-center">
+                              <Clock size={48} className="mx-auto text-muted-foreground mb-4" />
+                              <p className="text-muted-foreground">
+                                現在、承認待ちの規則はありません
+                              </p>
+                            </CardContent>
+                          </Card>
+                        ) : (
+                          pendingRules.map(rule => (
+                            <Card key={rule.id} className="border-orange-200">
+                              <CardContent className="pt-6">
+                                <div className="space-y-4">
+                                  <div className="flex items-start justify-between">
+                                    <div>
+                                      <h4 className="font-medium">{rule.title}</h4>
+                                      <div className="flex items-center gap-2 mt-1">
+                                        <Badge variant="secondary">{rule.category}</Badge>
+                                        <Badge variant="outline" className="text-orange-600 border-orange-200">
+                                          承認待ち
+                                        </Badge>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  
+                                  <p className="text-sm text-foreground">{rule.content}</p>
+                                  
+                                  <div className="text-xs text-muted-foreground space-y-1 bg-secondary/50 p-3 rounded">
+                                    <p className="flex items-center gap-2">
+                                      <UserCheck size={12} />
+                                      申請者: {rule.submittedBy}
+                                    </p>
+                                    {rule.submittedAt && (
+                                      <p className="flex items-center gap-2">
+                                        <Clock size={12} />
+                                        申請日時: {new Date(rule.submittedAt).toLocaleString('ja-JP')}
+                                      </p>
+                                    )}
+                                  </div>
+
+                                  <div className="space-y-3">
+                                    <Textarea
+                                      placeholder="承認・却下理由（却下の場合は必須）"
+                                      value={reviewComment}
+                                      onChange={(e) => setReviewComment(e.target.value)}
+                                      rows={2}
+                                      className="text-sm"
+                                    />
+                                    
+                                    <div className="flex gap-2">
+                                      <Button
+                                        onClick={() => handleApproveRule(rule.id)}
+                                        variant="default"
+                                        size="sm"
+                                        className="bg-green-600 hover:bg-green-700"
+                                      >
+                                        <Check size={14} className="mr-2" />
+                                        承認・公開
+                                      </Button>
+                                      <Button
+                                        onClick={() => handleRejectRule(rule.id)}
+                                        variant="destructive"
+                                        size="sm"
+                                      >
+                                        <X size={14} className="mr-2" />
+                                        却下
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          ))
+                        )}
+                      </TabsContent>
+                    )}
+                  </Tabs>
                 </CardContent>
               </Card>
             </ProtectedRoute>

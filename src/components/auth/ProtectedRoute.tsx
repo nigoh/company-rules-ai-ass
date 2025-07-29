@@ -47,14 +47,18 @@ export function ProtectedRoute({ user, allowedRoles, children, fallback }: Prote
 
 export function usePermissions(user: UserInfo | null) {
   const permissions = {
-    canViewRules: true, // Everyone can view rules
+    canViewRules: true, // Everyone can view published rules
     canSearchRules: true, // Everyone can search
     canAskAI: !!user, // Must be logged in
     canViewFAQ: true, // Everyone can view FAQ
-    canManageRules: user?.role === 'admin' || user?.role === 'hr',
+    canCreateRules: user?.role === 'admin' || user?.role === 'hr', // HR can create, needs approval
+    canManageRules: user?.role === 'admin' || user?.role === 'hr', // HR can manage but with workflow
+    canApproveRules: user?.role === 'admin', // Only admin can approve
+    canDeleteRules: user?.role === 'admin', // Only admin can delete
     canManageFAQ: user?.role === 'admin' || user?.role === 'hr',
     canManageUsers: user?.role === 'admin',
-    canViewAdmin: user?.role === 'admin' || user?.role === 'hr'
+    canViewAdmin: user?.role === 'admin' || user?.role === 'hr',
+    canViewPending: user?.role === 'admin' // Only admin sees pending rules
   }
 
   return permissions
