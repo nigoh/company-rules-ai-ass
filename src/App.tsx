@@ -7,8 +7,11 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import { useKV } from '@github/spark/hooks'
-import { Search, MessageCircle, Book, Settings, User, Plus, Edit2, Trash2, Send } from '@phosphor-icons/react'
+import { Search, MessageCircle, Book, Settings, User, Plus, Edit2, Trash2, Send, SignIn } from '@phosphor-icons/react'
 import { toast } from 'sonner'
+import { LoginDialog } from '@/components/auth/LoginDialog'
+import { UserProfile } from '@/components/auth/UserProfile'
+import { ProtectedRoute, usePermissions } from '@/components/auth/ProtectedRoute'
 
 interface Rule {
   id: string
@@ -30,6 +33,12 @@ interface ChatMessage {
   type: 'user' | 'ai'
   content: string
   timestamp: string
+}
+
+interface UserInfo {
+  email: string
+  role: 'admin' | 'hr' | 'employee'
+  name: string
 }
 
 function App() {
@@ -73,7 +82,7 @@ function App() {
   ])
 
   const [chatMessages, setChatMessages] = useKV<ChatMessage[]>('chat-history', [])
-  const [currentUser] = useKV('current-user', { isAdmin: false })
+  const [currentUser, setCurrentUser] = useKV<UserInfo | null>('current-user', null)
   
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('all')
@@ -81,6 +90,9 @@ function App() {
   const [isLoading, setIsLoading] = useState(false)
   const [editingRule, setEditingRule] = useState<Rule | null>(null)
   const [newRule, setNewRule] = useState({ title: '', content: '', category: '' })
+  const [showLoginDialog, setShowLoginDialog] = useState(false)
+
+  const permissions = usePermissions(currentUser)
 
   const categories = ['all', '勤務', '休暇', '服装', '給与', '福利厚生']
 
@@ -98,6 +110,11 @@ function App() {
 
   const handleChatSubmit = async () => {
     if (!chatInput.trim()) return
+    if (!currentUser) {
+      toast.error('AI質問機能を利用するにはログインが必要です')
+      setShowLoginDialog(true)
+      return
+    }
 
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
@@ -173,6 +190,12 @@ function App() {
     toast.success('規則を更新しました')
   }
 
+  const handleLogout = () => {
+    setCurrentUser(null)
+    setChatMessages([])
+    toast.success('ログアウトしました')
+  }
+
   const handleDeleteRule = (id: string) => {
     setRules(current => current.filter(rule => rule.id !== id))
     toast.success('規則を削除しました')
@@ -181,11 +204,24 @@ function App() {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-6 max-w-6xl">
-        <div className="flex items-center gap-3 mb-8">
-          <Book size={32} weight="bold" className="text-primary" />
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">社則AI</h1>
-            <p className="text-muted-foreground">Company Rules AI Assistant</p>
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-3">
+            <Book size={32} weight="bold" className="text-primary" />
+            <div>
+              <h1 className="text-3xl font-bold text-foreground">社則AI</h1>
+              <p className="text-muted-foreground">Company Rules AI Assistant</p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-3">
+            {currentUser ? (
+              <UserProfile user={currentUser} onLogout={handleLogout} />
+            ) : (
+              <Button onClick={() => setShowLoginDialog(true)} variant="outline">
+                <SignIn size={16} className="mr-2" />
+                ログイン
+              </Button>
+            )}
           </div>
         </div>
 
@@ -195,17 +231,27 @@ function App() {
               <Search size={16} />
               規則検索
             </TabsTrigger>
-            <TabsTrigger value="chat" className="flex items-center gap-2">
+            <TabsTrigger 
+              value="chat" 
+              className="flex items-center gap-2"
+              disabled={!permissions.canAskAI}
+            >
               <MessageCircle size={16} />
               AI質問
+              {!currentUser && <span className="text-xs">(要ログイン)</span>}
             </TabsTrigger>
             <TabsTrigger value="faq" className="flex items-center gap-2">
               <User size={16} />
               FAQ
             </TabsTrigger>
-            <TabsTrigger value="admin" className="flex items-center gap-2">
+            <TabsTrigger 
+              value="admin" 
+              className="flex items-center gap-2"
+              disabled={!permissions.canViewAdmin}
+            >
               <Settings size={16} />
               管理
+              {!permissions.canViewAdmin && <span className="text-xs">(権限不足)</span>}
             </TabsTrigger>
           </TabsList>
 
@@ -255,66 +301,84 @@ function App() {
           </TabsContent>
 
           <TabsContent value="chat" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>AI質問応答</CardTitle>
-                <CardDescription>
-                  会社の規則について質問してください。AIが適切な回答を提供します。
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="h-96 overflow-y-auto space-y-4 p-4 border rounded-lg bg-secondary/50">
-                  {chatMessages.map(message => (
-                    <div
-                      key={message.id}
-                      className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
-                    >
+            <ProtectedRoute
+              user={currentUser}
+              allowedRoles={['admin', 'hr', 'employee']}
+              fallback={
+                <Card>
+                  <CardContent className="pt-6 text-center">
+                    <p className="text-muted-foreground mb-4">
+                      AI質問機能を利用するにはログインが必要です
+                    </p>
+                    <Button onClick={() => setShowLoginDialog(true)}>
+                      <SignIn size={16} className="mr-2" />
+                      ログイン
+                    </Button>
+                  </CardContent>
+                </Card>
+              }
+            >
+              <Card>
+                <CardHeader>
+                  <CardTitle>AI質問応答</CardTitle>
+                  <CardDescription>
+                    会社の規則について質問してください。AIが適切な回答を提供します。
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="h-96 overflow-y-auto space-y-4 p-4 border rounded-lg bg-secondary/50">
+                    {chatMessages.map(message => (
                       <div
-                        className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                          message.type === 'user'
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-card text-card-foreground border'
-                        }`}
+                        key={message.id}
+                        className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
                       >
-                        <p className="text-sm">{message.content}</p>
-                        <p className="text-xs opacity-70 mt-1">
-                          {new Date(message.timestamp).toLocaleTimeString('ja-JP')}
-                        </p>
+                        <div
+                          className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
+                            message.type === 'user'
+                              ? 'bg-primary text-primary-foreground'
+                              : 'bg-card text-card-foreground border'
+                          }`}
+                        >
+                          <p className="text-sm">{message.content}</p>
+                          <p className="text-xs opacity-70 mt-1">
+                            {new Date(message.timestamp).toLocaleTimeString('ja-JP')}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                  {isLoading && (
-                    <div className="flex justify-start">
-                      <div className="bg-card text-card-foreground border px-4 py-2 rounded-lg">
-                        <p className="text-sm">回答を生成中...</p>
+                    ))}
+                    {isLoading && (
+                      <div className="flex justify-start">
+                        <div className="bg-card text-card-foreground border px-4 py-2 rounded-lg">
+                          <p className="text-sm">回答を生成中...</p>
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <Textarea
-                    placeholder="規則について質問してください..."
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    className="flex-1 resize-none"
-                    rows={2}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault()
-                        handleChatSubmit()
-                      }
-                    }}
-                  />
-                  <Button 
-                    onClick={handleChatSubmit} 
-                    disabled={isLoading || !chatInput.trim()}
-                    className="self-end"
-                  >
-                    <Send size={16} />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Textarea
+                      placeholder="規則について質問してください..."
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      className="flex-1 resize-none"
+                      rows={2}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault()
+                          handleChatSubmit()
+                        }
+                      }}
+                    />
+                    <Button 
+                      onClick={handleChatSubmit} 
+                      disabled={isLoading || !chatInput.trim()}
+                      className="self-end"
+                    >
+                      <Send size={16} />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </ProtectedRoute>
           </TabsContent>
 
           <TabsContent value="faq" className="space-y-6">
@@ -343,129 +407,160 @@ function App() {
           </TabsContent>
 
           <TabsContent value="admin" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>規則管理</CardTitle>
-                <CardDescription>
-                  会社規則の追加・編集・削除を行います。
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium">新しい規則を追加</h3>
-                  <div className="grid gap-4">
-                    <Input
-                      placeholder="規則のタイトル"
-                      value={newRule.title}
-                      onChange={(e) => setNewRule(prev => ({ ...prev, title: e.target.value }))}
-                    />
-                    <select
-                      value={newRule.category}
-                      onChange={(e) => setNewRule(prev => ({ ...prev, category: e.target.value }))}
-                      className="px-3 py-2 border border-input rounded-md bg-background"
-                    >
-                      <option value="">カテゴリを選択</option>
-                      {categories.slice(1).map(category => (
-                        <option key={category} value={category}>{category}</option>
-                      ))}
-                    </select>
-                    <Textarea
-                      placeholder="規則の内容"
-                      value={newRule.content}
-                      onChange={(e) => setNewRule(prev => ({ ...prev, content: e.target.value }))}
-                      rows={4}
-                    />
-                    <Button onClick={handleAddRule} className="w-fit">
-                      <Plus size={16} className="mr-2" />
-                      規則を追加
-                    </Button>
+            <ProtectedRoute
+              user={currentUser}
+              allowedRoles={['admin', 'hr']}
+              fallback={
+                <Card>
+                  <CardContent className="pt-6 text-center">
+                    <p className="text-muted-foreground mb-4">
+                      管理機能にアクセスするには管理者または人事部の権限が必要です
+                    </p>
+                    {!currentUser && (
+                      <Button onClick={() => setShowLoginDialog(true)}>
+                        <SignIn size={16} className="mr-2" />
+                        ログイン
+                      </Button>
+                    )}
+                  </CardContent>
+                </Card>
+              }
+            >
+              <Card>
+                <CardHeader>
+                  <CardTitle>規則管理</CardTitle>
+                  <CardDescription>
+                    会社規則の追加・編集・削除を行います。
+                    {currentUser && (
+                      <span className="block mt-1 text-xs">
+                        現在のアクセス権限: {currentUser.role === 'admin' ? '管理者' : '人事部'}
+                      </span>
+                    )}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-medium">新しい規則を追加</h3>
+                    <div className="grid gap-4">
+                      <Input
+                        placeholder="規則のタイトル"
+                        value={newRule.title}
+                        onChange={(e) => setNewRule(prev => ({ ...prev, title: e.target.value }))}
+                      />
+                      <select
+                        value={newRule.category}
+                        onChange={(e) => setNewRule(prev => ({ ...prev, category: e.target.value }))}
+                        className="px-3 py-2 border border-input rounded-md bg-background"
+                      >
+                        <option value="">カテゴリを選択</option>
+                        {categories.slice(1).map(category => (
+                          <option key={category} value={category}>{category}</option>
+                        ))}
+                      </select>
+                      <Textarea
+                        placeholder="規則の内容"
+                        value={newRule.content}
+                        onChange={(e) => setNewRule(prev => ({ ...prev, content: e.target.value }))}
+                        rows={4}
+                      />
+                      <Button onClick={handleAddRule} className="w-fit">
+                        <Plus size={16} className="mr-2" />
+                        規則を追加
+                      </Button>
+                    </div>
                   </div>
-                </div>
 
-                <Separator />
+                  <Separator />
 
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium">既存の規則</h3>
-                  {rules.map(rule => (
-                    <Card key={rule.id}>
-                      <CardContent className="pt-6">
-                        {editingRule?.id === rule.id ? (
-                          <div className="space-y-4">
-                            <Input
-                              value={editingRule.title}
-                              onChange={(e) => setEditingRule(prev => 
-                                prev ? { ...prev, title: e.target.value } : prev
-                              )}
-                            />
-                            <select
-                              value={editingRule.category}
-                              onChange={(e) => setEditingRule(prev => 
-                                prev ? { ...prev, category: e.target.value } : prev
-                              )}
-                              className="w-full px-3 py-2 border border-input rounded-md bg-background"
-                            >
-                              {categories.slice(1).map(category => (
-                                <option key={category} value={category}>{category}</option>
-                              ))}
-                            </select>
-                            <Textarea
-                              value={editingRule.content}
-                              onChange={(e) => setEditingRule(prev => 
-                                prev ? { ...prev, content: e.target.value } : prev
-                              )}
-                              rows={4}
-                            />
-                            <div className="flex gap-2">
-                              <Button onClick={handleUpdateRule} size="sm">
-                                保存
-                              </Button>
-                              <Button 
-                                onClick={() => setEditingRule(null)} 
-                                variant="outline" 
-                                size="sm"
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-medium">既存の規則</h3>
+                    {rules.map(rule => (
+                      <Card key={rule.id}>
+                        <CardContent className="pt-6">
+                          {editingRule?.id === rule.id ? (
+                            <div className="space-y-4">
+                              <Input
+                                value={editingRule.title}
+                                onChange={(e) => setEditingRule(prev => 
+                                  prev ? { ...prev, title: e.target.value } : prev
+                                )}
+                              />
+                              <select
+                                value={editingRule.category}
+                                onChange={(e) => setEditingRule(prev => 
+                                  prev ? { ...prev, category: e.target.value } : prev
+                                )}
+                                className="w-full px-3 py-2 border border-input rounded-md bg-background"
                               >
-                                キャンセル
-                              </Button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div>
-                            <div className="flex items-start justify-between mb-2">
-                              <div>
-                                <h4 className="font-medium">{rule.title}</h4>
-                                <Badge variant="secondary" className="mt-1">{rule.category}</Badge>
-                              </div>
+                                {categories.slice(1).map(category => (
+                                  <option key={category} value={category}>{category}</option>
+                                ))}
+                              </select>
+                              <Textarea
+                                value={editingRule.content}
+                                onChange={(e) => setEditingRule(prev => 
+                                  prev ? { ...prev, content: e.target.value } : prev
+                                )}
+                                rows={4}
+                              />
                               <div className="flex gap-2">
-                                <Button
-                                  onClick={() => setEditingRule(rule)}
-                                  variant="outline"
-                                  size="sm"
-                                >
-                                  <Edit2 size={14} />
+                                <Button onClick={handleUpdateRule} size="sm">
+                                  保存
                                 </Button>
-                                <Button
-                                  onClick={() => handleDeleteRule(rule.id)}
-                                  variant="destructive"
+                                <Button 
+                                  onClick={() => setEditingRule(null)} 
+                                  variant="outline" 
                                   size="sm"
                                 >
-                                  <Trash2 size={14} />
+                                  キャンセル
                                 </Button>
                               </div>
                             </div>
-                            <p className="text-sm text-muted-foreground">{rule.content}</p>
-                            <p className="text-xs text-muted-foreground mt-2">
-                              更新日: {rule.lastUpdated}
-                            </p>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                          ) : (
+                            <div>
+                              <div className="flex items-start justify-between mb-2">
+                                <div>
+                                  <h4 className="font-medium">{rule.title}</h4>
+                                  <Badge variant="secondary" className="mt-1">{rule.category}</Badge>
+                                </div>
+                                <div className="flex gap-2">
+                                  <Button
+                                    onClick={() => setEditingRule(rule)}
+                                    variant="outline"
+                                    size="sm"
+                                  >
+                                    <Edit2 size={14} />
+                                  </Button>
+                                  <Button
+                                    onClick={() => handleDeleteRule(rule.id)}
+                                    variant="destructive"
+                                    size="sm"
+                                  >
+                                    <Trash2 size={14} />
+                                  </Button>
+                                </div>
+                              </div>
+                              <p className="text-sm text-muted-foreground">{rule.content}</p>
+                              <p className="text-xs text-muted-foreground mt-2">
+                                更新日: {rule.lastUpdated}
+                              </p>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </ProtectedRoute>
           </TabsContent>
         </Tabs>
+
+        <LoginDialog
+          open={showLoginDialog}
+          onOpenChange={setShowLoginDialog}
+          onLogin={handleLogin}
+        />
       </div>
     </div>
   )
