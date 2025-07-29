@@ -632,6 +632,8 @@ function App() {
       toast.error('要約の生成に失敗しました')
     }
   }
+
+  const handleLogout = () => {
     setCurrentUser(null)
     setChatMessages([])
     toast.success('ログアウトしました')
