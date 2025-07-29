@@ -62,20 +62,19 @@ function App() {
       title: '有給休暇の取得について',
       content: '有給休暇は入社日から6ヶ月経過後に付与されます。取得時は3営業日前までに申請が必要です。年次有給休暇の取得促進のため、計画的付与制度を導入しています。',
       category: '休暇',
-      lastUpdated: '2024-01-10',
       status: 'published'
     },
+    },
     {
-      id: '3',
       title: '服装規定',
       content: 'ビジネスカジュアルを基本とします。お客様との面談がある日はスーツ着用を推奨します。安全上の理由から、サンダルでの勤務は禁止です。',
       category: '服装',
       lastUpdated: '2024-01-05',
+      lastUpdated: '2024-01-05',
       status: 'published'
-    }
   ])
-
-  const [faqs, setFaqs] = useKV<FAQ[]>('company-faqs', [
+  ])
+ useKV<FAQ[]>('company-faqs', [
     {
       id: '1',
       question: '残業代はどのように計算されますか？',
