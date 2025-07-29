@@ -1,18 +1,18 @@
 /**
- * OpenAI Service for Enhanced AI Capabilities
+ * OpenAI Service for Company Rules AI System
  * Provides comprehensive AI functionality for the Company Rules AI system
  */
-
-export interface OpenAIConfig {
-  model: 'gpt-4o' | 'gpt-4o-mini'
-  temperature: number
-  maxTokens: number
-  jsonMode: boolean
-}
 
 export interface ChatCompletionMessage {
   role: 'system' | 'user' | 'assistant'
   content: string
+}
+
+export interface OpenAIConfig {
+  model: string
+  temperature: number
+  maxTokens: number
+  jsonMode: boolean
 }
 
 export interface AIAnalysisResponse {
@@ -27,27 +27,12 @@ export interface AIAnalysisResponse {
   }
 }
 
-/**
- * OpenAI Service Singleton Class
- * Handles all AI-related operations using Spark Runtime API
- */
 export class OpenAIService {
-  private static instance: OpenAIService
-  
   private readonly defaultConfig: OpenAIConfig = {
     model: 'gpt-4o',
     temperature: 0.7,
-    maxTokens: 2000,
+    maxTokens: 4000,
     jsonMode: false
-  }
-
-  private constructor() {}
-
-  static getInstance(): OpenAIService {
-    if (!OpenAIService.instance) {
-      OpenAIService.instance = new OpenAIService()
-    }
-    return OpenAIService.instance
   }
 
   /**
@@ -132,7 +117,7 @@ export class OpenAIService {
       return {
         type: 'rule_analysis',
         result: analysis,
-        confidence: analysis.overallScore / 10,
+        confidence: 0.9,
         suggestions: analysis.improvements,
         metadata: {
           tokensUsed: response.length,
@@ -155,7 +140,7 @@ export class OpenAIService {
     userContext: { name: string; role: string; email: string }
   ): Promise<AIAnalysisResponse> {
     const startTime = Date.now()
-
+    
     try {
       const conversation = messages.map(msg => 
         `${msg.type === 'user' ? 'ユーザー' : 'AI'}: ${msg.content}`
@@ -175,11 +160,11 @@ export class OpenAIService {
         ## 分析要件
         1. **会話の概要**: 主要な質問と回答の要約
         2. **ユーザーの関心領域**: 質問パターンから読み取れる関心事
-        3. **知識ギャップ**: ユーザーの理解不足領域
+        3. **理解度評価**: ユーザーの理解レベルの評価
         4. **フォローアップ**: 推奨される追加質問や確認事項
         5. **行動提案**: ユーザーが取るべき具体的なアクション
 
-        JSON形式で返してください:
+        JSON形式で結果を返してください:
         {
           "summary": "会話の概要",
           "keyTopics": ["主要トピック1", "主要トピック2"],
@@ -218,8 +203,7 @@ export class OpenAIService {
    */
   async analyzePolicyGaps(
     currentRules: any[],
-    interactionLogs: any[],
-    industryContext?: string
+    interactionLogs: any[]
   ): Promise<AIAnalysisResponse> {
     const startTime = Date.now()
     
@@ -231,25 +215,21 @@ export class OpenAIService {
         ${currentRules.map(rule => `
         [${rule.category}] ${rule.title}
         内容: ${rule.content}
-        更新日: ${rule.lastUpdated}
         `).join('\n')}
 
         ## 質問履歴分析 (${interactionLogs.length}件)
         ${interactionLogs.slice(-30).map(log => `
         質問: ${log.question}
-        カテゴリ: 推定 - ${log.category || '不明'}
-        日時: ${log.timestamp}
+        カテゴリ: ${log.category || '未分類'}
         `).join('\n')}
-
-        ${industryContext ? `## 業界コンテキスト\n${industryContext}\n` : ''}
 
         ## 分析要件
         1. **カバレッジ分析**: 規則でカバーされていない領域
         2. **質問トレンド**: よく質問される未規則化領域
-        3. **業界基準**: 業界標準と比較した不足領域
+        3. **業界比較**: 一般的な業界標準との比較
         4. **緊急度評価**: 新規則作成の優先順位
 
-        JSON形式で返してください:
+        JSON形式で結果を返してください:
         {
           "coverage": {
             "coveredAreas": ["カバー済み領域"],
@@ -259,7 +239,7 @@ export class OpenAIService {
           "questionTrends": {
             "frequentTopics": ["よく質問される話題"],
             "emergingConcerns": ["新しい関心事"],
-            "seasonalPatterns": ["季節的パターン"]
+            "uncoveredQuestions": ["未対応の質問カテゴリ"]
           },
           "industryComparison": {
             "missingStandards": ["不足している業界標準"],
@@ -271,7 +251,7 @@ export class OpenAIService {
               "category": "カテゴリ",
               "priority": "高/中/低",
               "rationale": "必要性の理由",
-              "estimatedImpact": "期待される効果"
+              "estimatedImpact": "予想される効果"
             }
           ],
           "implementationPlan": "実装計画の概要"
@@ -307,59 +287,55 @@ export class OpenAIService {
     userProfiles: any[] = []
   ): Promise<AIAnalysisResponse> {
     const startTime = Date.now()
-
+    
     try {
       const prompt = spark.llmPrompt`
         ユーザーの質問パターンと行動を分析し、システム改善のインサイトを提供してください:
 
         ## インタラクションログ (${interactionLogs.length}件)
         ${interactionLogs.slice(-50).map(log => `
-        ユーザー: ${log.userId}
+        ユーザー: ${log.userRole || '不明'}
         質問: ${log.question}
-        回答長: ${log.responseLength}文字
         時刻: ${log.timestamp}
+        満足度: ${log.satisfaction || '不明'}
         `).join('\n')}
 
-        ## ユーザープロファイル (${userProfiles.length}人)
-        ${userProfiles.map(user => `
-        役職: ${user.role}
-        活動レベル: ${user.activityLevel || '不明'}
+        ## ユーザープロファイル (${userProfiles.length}件)
+        ${userProfiles.map(profile => `
+        役職: ${profile.role}
+        部署: ${profile.department}
+        経験年数: ${profile.experience}
         `).join('\n')}
 
         ## 分析要件
-        1. **利用パターン**: 時間帯、頻度、質問タイプ
-        2. **エンゲージメント**: システムとの相互作用レベル
-        3. **理解度**: 質問の複雑さと理解度の推定
-        4. **満足度**: 推定ユーザー満足度
-        5. **改善領域**: システム改善の提案
+        1. **使用パターン**: ユーザーの質問頻度と時間帯
+        2. **関心領域**: 役職別・部署別の関心事
+        3. **理解度分析**: よくある誤解や混乱ポイント
+        4. **満足度要因**: 高評価・低評価の要因分析
+        5. **改善提案**: UIやコンテンツの改善案
 
-        JSON形式で返してください:
+        JSON形式で結果を返してください:
         {
           "usagePatterns": {
             "peakHours": ["ピーク時間帯"],
-            "commonQuestionTypes": ["よくある質問タイプ"],
-            "sessionLength": "平均セッション長"
+            "frequentUsers": ["頻繁利用者の特徴"],
+            "sessionDuration": "平均セッション時間"
           },
-          "engagement": {
-            "activeUsers": number,
-            "repeatUsers": number,
-            "engagementScore": number
+          "interestsByRole": {
+            "role": ["関心トピック"]
           },
-          "comprehension": {
-            "avgComplexity": "質問の平均複雑度",
-            "understandingLevel": "推定理解度",
-            "learningProgress": "学習進捗"
+          "commonMisunderstandings": ["よくある誤解"],
+          "satisfactionFactors": {
+            "positive": ["高評価要因"],
+            "negative": ["低評価要因"]
           },
-          "satisfaction": {
-            "estimatedSatisfaction": "推定満足度",
-            "contentGaps": ["不満要因"],
-            "positiveSignals": ["満足要因"]
-          },
-          "improvements": {
-            "uiRecommendations": ["UI改善提案"],
-            "contentSuggestions": ["コンテンツ提案"],
-            "featureRequests": ["機能要望"]
-          }
+          "improvementSuggestions": [
+            {
+              "area": "改善領域",
+              "suggestion": "具体的提案",
+              "expectedImpact": "期待効果"
+            }
+          ]
         }
       `
 
@@ -370,7 +346,7 @@ export class OpenAIService {
         type: 'user_behavior',
         result: analysis,
         confidence: 0.75,
-        suggestions: analysis.improvements?.featureRequests || [],
+        suggestions: analysis.improvementSuggestions?.map((sugg: any) => sugg.suggestion) || [],
         metadata: {
           tokensUsed: response.length,
           processingTime: Date.now() - startTime,
@@ -384,8 +360,8 @@ export class OpenAIService {
   }
 
   /**
-   * 質問候補生成機能
-   * ユーザーの入力に基づいて関連する質問候補を提案
+   * 質問提案機能
+   * ユーザーの入力に基づいて関連する質問候補を生成
    */
   async generateQuestionSuggestions(
     userInput: string,
@@ -394,45 +370,46 @@ export class OpenAIService {
     availableRules: any[]
   ): Promise<string[]> {
     try {
-      const recentChat = chatHistory.slice(-5).map(msg => 
-        `${msg.type}: ${msg.content}`
-      ).join('\n')
+      const recentQuestions = chatHistory.slice(-5).map(msg => 
+        msg.type === 'user' ? msg.content : ''
+      ).filter(Boolean)
 
       const prompt = spark.llmPrompt`
-        ユーザーの入力と文脈に基づいて、関連性の高い質問候補を3-5個生成してください:
+        ユーザーの入力と会話履歴を分析し、関連する質問候補を提案してください:
 
-        ## ユーザー入力
+        ## 現在の入力
         "${userInput}"
 
-        ## 最近の会話履歴
-        ${recentChat}
-
         ## ユーザー情報
-        役職: ${userContext.role}
-        
+        - 役職: ${userContext.role}
+        - 名前: ${userContext.name}
+
+        ## 最近の質問履歴
+        ${recentQuestions.join('\n')}
+
         ## 利用可能な規則カテゴリ
         ${[...new Set(availableRules.map(rule => rule.category))].join(', ')}
 
-        ## 要求
-        - 入力内容に関連する自然な質問を提案
-        - ユーザーの役職に適した質問レベル
-        - 実務的で具体的な質問
-        - 簡潔で分かりやすい文言
+        ## 質問候補生成要件
+        1. 入力に関連する具体的な質問を3-5個提案
+        2. ユーザーの役職レベルに適した内容
+        3. 会社規則の実際のカテゴリに基づく質問
+        4. 実務で役立つ具体的な質問
 
-        JSON配列形式で返してください:
+        配列形式で質問候補を返してください:
         ["質問候補1", "質問候補2", "質問候補3"]
       `
 
-      const response = await spark.llm(prompt, 'gpt-4o-mini', true)
+      const response = await spark.llm(prompt, 'gpt-4o', true)
       const suggestions = JSON.parse(response)
       
-      return Array.isArray(suggestions) ? suggestions : []
+      return Array.isArray(suggestions) ? suggestions.slice(0, 5) : []
     } catch (error) {
-      console.error('Question suggestion error:', error)
+      console.error('Question suggestions error:', error)
       return []
     }
   }
 }
 
-// Export singleton instance
-export const openaiService = OpenAIService.getInstance()
+// シングルトンインスタンスをエクスポート
+export const openaiService = new OpenAIService()
