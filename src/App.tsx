@@ -998,6 +998,12 @@ function App() {
     }
   }
 
+  const handleLogin = (user: UserInfo) => {
+    setCurrentUser(user)
+    setShowLoginDialog(false)
+    toast.success(`${user.name}さん、こんにちは！`)
+  }
+
   const handleLogout = () => {
     setCurrentUser(null)
     setChatMessages([])
