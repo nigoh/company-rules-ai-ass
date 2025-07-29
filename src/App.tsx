@@ -201,6 +201,11 @@ function App() {
     toast.success('規則を削除しました')
   }
 
+  const handleLogin = (user: UserInfo) => {
+    setCurrentUser(user)
+    toast.success(`${user.name}としてログインしました`)
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-6 max-w-6xl">
