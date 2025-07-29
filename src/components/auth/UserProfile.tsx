@@ -36,6 +36,17 @@ const roleConfig = {
 }
 
 export function UserProfile({ user, onLogout }: UserProfileProps) {
+  // Ensure user has a valid role
+  if (!user || !user.role || !roleConfig[user.role]) {
+    console.error('Invalid user object or role:', user)
+    return (
+      <Button variant="outline" onClick={onLogout}>
+        <User size={16} className="mr-2" />
+        Unknown User
+      </Button>
+    )
+  }
+
   const config = roleConfig[user.role]
   const IconComponent = config.icon
 
