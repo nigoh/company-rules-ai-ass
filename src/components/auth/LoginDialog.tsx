@@ -1,35 +1,35 @@
 import { useState } from 'react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Card, CardContent, CardDescription, 
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { User, Lock } from '@phosphor-icons/react'
-import { toast } from 'sonner'
-
-interface LoginDialogProps {
   open: boolean
-  onOpenChange: (open: boolean) => void
-  onLogin: (user: { email: string; role: 'admin' | 'hr' | 'employee'; name: string }) => void
-}
 
-export function LoginDialog({ open, onOpenChange, onLogin }: LoginDialogProps) {
-  const [loginForm, setLoginForm] = useState({ email: '', password: '' })
-  const [registerForm, setRegisterForm] = useState({ 
+
+  const [loginF
     name: '', 
-    email: '', 
     password: '', 
-    confirmPassword: '',
-    role: 'employee' as 'admin' | 'hr' | 'employee'
-  })
-  const [isLoading, setIsLoading] = useState(false)
+ 
 
   // Demo users for testing
-  const demoUsers = [
-    { email: 'admin@company.com', password: 'admin123', role: 'admin' as const, name: '管理者' },
-    { email: 'hr@company.com', password: 'hr123', role: 'hr' as const, name: '人事部' },
-    { email: 'employee@company.com', password: 'emp123', role: 'employee' as const, name: '社員' }
+    { email: 'admin@company.com', password: 'admin123', role: 'admin' as 
+    { email: 'employee@company.com', password: 'emp12
+
+    if (!loginF
+      return
+
+    
+    
+    const user = demoUsers.find(u => 
+
+    if (user) {
+        email: user.e
+        name: user.name
+      onOpenChange(false)
+      setLoginForm({ email: '', password: '' })
   ]
 
   const handleLogin = async () => {
@@ -63,71 +63,71 @@ export function LoginDialog({ open, onOpenChange, onLogin }: LoginDialogProps) {
     setIsLoading(false)
   }
 
-  const handleRegister = async () => {
-    if (!registerForm.name || !registerForm.email || !registerForm.password) {
-      toast.error('すべての項目を入力してください')
-      return
-    }
 
-    if (registerForm.password !== registerForm.confirmPassword) {
-      toast.error('パスワードが一致しません')
-      return
-    }
-
-    if (registerForm.password.length < 6) {
-      toast.error('パスワードは6文字以上で入力してください')
-      return
-    }
-
-    setIsLoading(true)
-    
-    // Simulate registration delay
-    await new Promise(resolve => setTimeout(resolve, 1000))
-
-    // Check if user already exists
-    const existingUser = demoUsers.find(u => u.email === registerForm.email)
-    if (existingUser) {
-      toast.error('このメールアドレスは既に登録されています')
-      setIsLoading(false)
-      return
-    }
-
-    onLogin({
       email: registerForm.email,
-      role: registerForm.role,
       name: registerForm.name
-    })
-    onOpenChange(false)
-    toast.success('アカウントを作成してログインしました')
-    setRegisterForm({ 
-      name: '', 
-      email: '', 
-      password: '', 
+    onOpenCh
+    s
+
       confirmPassword: '',
-      role: 'employee'
     })
-    
-    setIsLoading(false)
-  }
+    setIsLoa
 
-  const handleDemoLogin = (demoUser: typeof demoUsers[0]) => {
-    onLogin({
-      email: demoUser.email,
+
       role: demoUser.role,
-      name: demoUser.name
     })
-    onOpenChange(false)
-    toast.success(`${demoUser.name}としてログインしました`)
-  }
+    toast.su
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <User size={20} />
-            ログイン
+    
           </DialogTitle>
+            社則AIにアクセスするためにログインしてください
+
+        <Tabs defaultValue="login" 
+            <TabsTrigger value="login">ログイン</TabsTrigger>
+          </TabsList>
+          <TabsContent value="login" clas
+              <div>
+            
+     
+
+             
+              <div>
+                <Input
+                  type="passw
+      
+              </div>
+                onClick={handleLogin} 
+                disabl
+                
+            </div
+            <div cla
+                または デモアカウン
+              {demoUse
+      
+    
+                  onCli
+   
+
+            </div>
+
+            <div className="
+                <Label htm
+                  id="reg
+      
+                />
+              <div>
+   
+
+          
+                />
+              <div>
+                <selec
+                  value={registerForm.role}
+                    ...prev, 
+                
+                >
           <DialogDescription>
             社則AIにアクセスするためにログインしてください
           </DialogDescription>
@@ -221,6 +221,42 @@ export function LoginDialog({ open, onOpenChange, onLogin }: LoginDialogProps) {
                   className="w-full px-3 py-2 border border-input rounded-md bg-background"
                 >
                   <option value="employee">一般社員</option>
+                  <option value="hr">人事部</option>
+                  <option value="admin">管理者</option>
+                </select>
+              </div>
+              <div>
+                <Label htmlFor="reg-password">パスワード</Label>
+                <Input
+                  id="reg-password"
+                  type="password"
+                  value={registerForm.password}
+                  onChange={(e) => setRegisterForm(prev => ({ ...prev, password: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label htmlFor="reg-confirm">パスワード確認</Label>
+                <Input
+                  id="reg-confirm"
+                  type="password"
+                  value={registerForm.confirmPassword}
+                  onChange={(e) => setRegisterForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                />
+              </div>
+              <Button 
+                onClick={handleRegister} 
+                className="w-full" 
+                disabled={isLoading}
+              >
+                {isLoading ? '登録中...' : 'アカウント作成'}
+              </Button>
+            </div>
+          </TabsContent>
+        </Tabs>
+      </DialogContent>
+    </Dialog>
+  )
+}                  <option value="employee">一般社員</option>
                   <option value="hr">人事部</option>
                   <option value="admin">管理者</option>
                 </select>
