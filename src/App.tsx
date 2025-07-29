@@ -48,7 +48,7 @@ interface UserInfo {
 }
 
 // AIインサイトパネルコンポーネント
-function AIInsightsPanel() {
+function AIInsightsPanel({ exportConversationData }: { exportConversationData: () => void }) {
   const [logs, setLogs] = useState<any[]>([])
   const [analytics, setAnalytics] = useState<any>(null)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -74,36 +74,100 @@ function AIInsightsPanel() {
 
     setIsGenerating(true)
     try {
-      const recentQuestions = logs.slice(-10).map(log => log.question).join('\n')
+      const recentQuestions = logs.slice(-15).map(log => log.question).join('\n')
+      const questionCategories = logs.map(log => log.question).join('\n')
+      
+      // Get current rules for context
+      const currentRules = await spark.kv.get<Rule[]>('company-rules') || []
+      const publishedRules = currentRules.filter(rule => rule.status === 'published')
       
       const prompt = spark.llmPrompt`
-        以下のAI質問履歴を分析し、インサイトを提供してください:
+        以下のAI質問履歴と現在の会社規則を総合的に分析し、詳細なインサイトを提供してください:
 
-        質問履歴:
+        ## 質問履歴 (最新15件):
         ${recentQuestions}
 
-        分析項目:
-        1. よく質問される規則カテゴリ
-        2. 質問の傾向（複雑さ、頻度など）
-        3. 規則の不備や改善提案
-        4. 新しいFAQの提案
-        5. 社員の関心事項
+        ## 現在の会社規則:
+        ${publishedRules.map(rule => `
+        [${rule.category}] ${rule.title}
+        内容: ${rule.content}
+        最終更新: ${rule.lastUpdated}
+        `).join('\n')}
 
-        JSON形式で回答:
+        ## 統計データ:
+        - 総質問数: ${logs.length}件
+        - 分析対象期間: 最新${Math.min(logs.length, 15)}件
+        - アクティブユーザー数: ${[...new Set(logs.map(log => log.userId))].length}人
+        - 平均回答長: ${logs.length > 0 ? Math.round(logs.reduce((sum, log) => sum + log.responseLength, 0) / logs.length) : 0}文字
+
+        ## 詳細分析要求:
+
+        ### 1. カテゴリ別需要分析
+        - 最も質問されるカテゴリの特定
+        - カテゴリごとの質問傾向
+        - 需要の季節性や時間的パターン
+
+        ### 2. 規則のギャップ分析
+        - 質問内容と既存規則の比較
+        - 規則が不足している領域の特定
+        - 規則の明確性・理解しやすさの評価
+
+        ### 3. ユーザー行動パターン
+        - 質問の複雑さレベル分析
+        - リピート質問の特定
+        - ユーザーの理解度評価
+
+        ### 4. 業務効率化提案
+        - よく聞かれる質問のFAQ化提案
+        - 規則の整備・改善提案
+        - 社員教育・周知の改善点
+
+        ### 5. 予測的インサイト
+        - 今後増加すると予想される質問カテゴリ
+        - 潜在的な問題領域の予測
+        - 規則整備の優先順位
+
+        JSON形式で以下の構造で回答してください:
         {
-          "topCategories": ["カテゴリ1", "カテゴリ2"],
-          "trends": "傾向の説明",
-          "improvements": ["改善提案1", "改善提案2"],
-          "suggestedFAQs": [{"question": "質問", "category": "カテゴリ"}],
-          "insights": "全体的な洞察"
+          "categoryAnalysis": {
+            "topCategories": ["カテゴリ1", "カテゴリ2", "カテゴリ3"],
+            "categoryTrends": "カテゴリ別の詳細な需要分析",
+            "seasonalPatterns": "時間的・季節的パターンの分析"
+          },
+          "gapAnalysis": {
+            "missingRules": ["不足している規則領域1", "不足している規則領域2"],
+            "unclearRules": ["不明確な規則1", "不明確な規則2"],
+            "improvementAreas": ["改善が必要な領域1", "改善が必要な領域2"]
+          },
+          "userBehavior": {
+            "complexityLevel": "質問の複雑さレベル（簡単/中程度/複雑）",
+            "repeatQuestions": ["よく繰り返される質問1", "よく繰り返される質問2"],
+            "comprehensionLevel": "ユーザーの理解度評価"
+          },
+          "efficiency": {
+            "suggestedFAQs": [
+              {"question": "FAQ候補質問1", "category": "カテゴリ", "priority": "高/中/低"},
+              {"question": "FAQ候補質問2", "category": "カテゴリ", "priority": "高/中/低"}
+            ],
+            "ruleImprovements": ["規則改善提案1", "規則改善提案2"],
+            "trainingNeeds": ["社員教育が必要な分野1", "社員教育が必要な分野2"]
+          },
+          "predictions": {
+            "emergingTopics": ["今後注目される話題1", "今後注目される話題2"],
+            "potentialIssues": ["潜在的な問題1", "潜在的な問題2"],
+            "priorityActions": ["優先すべきアクション1", "優先すべきアクション2"]
+          },
+          "overallInsights": "総合的な洞察とレコメンデーション",
+          "actionItems": ["具体的な改善アクション1", "具体的な改善アクション2", "具体的な改善アクション3"]
         }
       `
 
       const response = await spark.llm(prompt, 'gpt-4o', true)
       const analyticsData = JSON.parse(response)
       setAnalytics(analyticsData)
-      toast.success('分析が完了しました')
+      toast.success('高度な分析が完了しました')
     } catch (error) {
+      console.error('Analytics generation error:', error)
       toast.error('分析の生成に失敗しました')
     } finally {
       setIsGenerating(false)
@@ -114,23 +178,33 @@ function AIInsightsPanel() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-medium">AIインサイト</h3>
-        <Button 
-          onClick={generateAnalytics} 
-          disabled={isGenerating || logs.length < 5}
-          variant="outline"
-        >
-          {isGenerating ? (
-            <>
-              <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full mr-2"></div>
-              分析中...
-            </>
-          ) : (
-            <>
-              <Sparkle size={16} className="mr-2" />
-              分析実行
-            </>
-          )}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button 
+            onClick={exportConversationData} 
+            variant="outline"
+            size="sm"
+          >
+            <FileText size={14} className="mr-2" />
+            データ出力
+          </Button>
+          <Button 
+            onClick={generateAnalytics} 
+            disabled={isGenerating || logs.length < 5}
+            variant="outline"
+          >
+            {isGenerating ? (
+              <>
+                <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full mr-2"></div>
+                分析中...
+              </>
+            ) : (
+              <>
+                <Sparkle size={16} className="mr-2" />
+                分析実行
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -180,55 +254,268 @@ function AIInsightsPanel() {
       </div>
 
       {analytics && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">AI分析結果</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <h4 className="font-medium mb-2">人気カテゴリ</h4>
-              <div className="flex flex-wrap gap-2">
-                {analytics.topCategories?.map((category: string, index: number) => (
-                  <Badge key={index} variant="secondary">{category}</Badge>
-                ))}
+        <div className="space-y-4">
+          {/* Category Analysis */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                📊 カテゴリ別需要分析
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <h4 className="font-medium mb-2">人気カテゴリ</h4>
+                <div className="flex flex-wrap gap-2">
+                  {analytics.categoryAnalysis?.topCategories?.map((category: string, index: number) => (
+                    <Badge key={index} variant="secondary">{category}</Badge>
+                  ))}
+                </div>
               </div>
-            </div>
+              
+              {analytics.categoryAnalysis?.categoryTrends && (
+                <div>
+                  <h4 className="font-medium mb-2">カテゴリ傾向</h4>
+                  <p className="text-sm text-muted-foreground">{analytics.categoryAnalysis.categoryTrends}</p>
+                </div>
+              )}
+              
+              {analytics.categoryAnalysis?.seasonalPatterns && (
+                <div>
+                  <h4 className="font-medium mb-2">時間的パターン</h4>
+                  <p className="text-sm text-muted-foreground">{analytics.categoryAnalysis.seasonalPatterns}</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-            <div>
-              <h4 className="font-medium mb-2">質問傾向</h4>
-              <p className="text-sm text-muted-foreground">{analytics.trends}</p>
-            </div>
+          {/* Gap Analysis */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                🔍 規則ギャップ分析
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {analytics.gapAnalysis?.missingRules?.length > 0 && (
+                <div>
+                  <h4 className="font-medium mb-2 text-orange-600">不足している規則領域</h4>
+                  <ul className="text-sm text-muted-foreground space-y-1">
+                    {analytics.gapAnalysis.missingRules.map((rule: string, index: number) => (
+                      <li key={index} className="flex items-start gap-2">
+                        <span className="text-orange-500">⚠️</span>
+                        {rule}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
+              {analytics.gapAnalysis?.unclearRules?.length > 0 && (
+                <div>
+                  <h4 className="font-medium mb-2 text-blue-600">明確化が必要な規則</h4>
+                  <ul className="text-sm text-muted-foreground space-y-1">
+                    {analytics.gapAnalysis.unclearRules.map((rule: string, index: number) => (
+                      <li key={index} className="flex items-start gap-2">
+                        <span className="text-blue-500">💡</span>
+                        {rule}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
+              {analytics.gapAnalysis?.improvementAreas?.length > 0 && (
+                <div>
+                  <h4 className="font-medium mb-2 text-green-600">改善領域</h4>
+                  <ul className="text-sm text-muted-foreground space-y-1">
+                    {analytics.gapAnalysis.improvementAreas.map((area: string, index: number) => (
+                      <li key={index} className="flex items-start gap-2">
+                        <span className="text-green-500">🔧</span>
+                        {area}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-            <div>
-              <h4 className="font-medium mb-2">改善提案</h4>
-              <ul className="text-sm text-muted-foreground space-y-1">
-                {analytics.improvements?.map((improvement: string, index: number) => (
-                  <li key={index} className="flex items-start gap-2">
-                    <span className="text-primary">•</span>
-                    {improvement}
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div>
-              <h4 className="font-medium mb-2">推奨FAQ</h4>
-              <div className="space-y-2">
-                {analytics.suggestedFAQs?.map((faq: any, index: number) => (
-                  <div key={index} className="text-sm p-2 bg-secondary/50 rounded">
-                    <Badge variant="outline" className="text-xs mb-1">{faq.category}</Badge>
-                    <p className="font-medium">{faq.question}</p>
+          {/* User Behavior */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                👥 ユーザー行動分析
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {analytics.userBehavior?.complexityLevel && (
+                <div>
+                  <h4 className="font-medium mb-2">質問の複雑さ</h4>
+                  <Badge variant="outline">{analytics.userBehavior.complexityLevel}</Badge>
+                </div>
+              )}
+              
+              {analytics.userBehavior?.repeatQuestions?.length > 0 && (
+                <div>
+                  <h4 className="font-medium mb-2">よく繰り返される質問</h4>
+                  <div className="space-y-1">
+                    {analytics.userBehavior.repeatQuestions.map((question: string, index: number) => (
+                      <p key={index} className="text-sm p-2 bg-secondary/50 rounded">
+                        {question}
+                      </p>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </div>
+                </div>
+              )}
+              
+              {analytics.userBehavior?.comprehensionLevel && (
+                <div>
+                  <h4 className="font-medium mb-2">理解度評価</h4>
+                  <p className="text-sm text-muted-foreground">{analytics.userBehavior.comprehensionLevel}</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-            <div>
-              <h4 className="font-medium mb-2">総合インサイト</h4>
-              <p className="text-sm text-muted-foreground">{analytics.insights}</p>
-            </div>
-          </CardContent>
-        </Card>
+          {/* Efficiency Recommendations */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                ⚡ 効率化提案
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {analytics.efficiency?.suggestedFAQs?.length > 0 && (
+                <div>
+                  <h4 className="font-medium mb-2">推奨FAQ</h4>
+                  <div className="space-y-2">
+                    {analytics.efficiency.suggestedFAQs.map((faq: any, index: number) => (
+                      <div key={index} className="text-sm p-3 bg-secondary/50 rounded border-l-4 border-accent">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Badge variant="outline" className="text-xs">{faq.category}</Badge>
+                          <Badge 
+                            variant={faq.priority === '高' ? 'destructive' : faq.priority === '中' ? 'default' : 'secondary'}
+                            className="text-xs"
+                          >
+                            {faq.priority}
+                          </Badge>
+                        </div>
+                        <p className="font-medium">{faq.question}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {analytics.efficiency?.ruleImprovements?.length > 0 && (
+                <div>
+                  <h4 className="font-medium mb-2">規則改善提案</h4>
+                  <ul className="text-sm text-muted-foreground space-y-1">
+                    {analytics.efficiency.ruleImprovements.map((improvement: string, index: number) => (
+                      <li key={index} className="flex items-start gap-2">
+                        <span className="text-primary">📝</span>
+                        {improvement}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
+              {analytics.efficiency?.trainingNeeds?.length > 0 && (
+                <div>
+                  <h4 className="font-medium mb-2">教育・周知が必要な分野</h4>
+                  <ul className="text-sm text-muted-foreground space-y-1">
+                    {analytics.efficiency.trainingNeeds.map((need: string, index: number) => (
+                      <li key={index} className="flex items-start gap-2">
+                        <span className="text-primary">🎓</span>
+                        {need}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Predictions */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                🔮 予測的インサイト
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {analytics.predictions?.emergingTopics?.length > 0 && (
+                <div>
+                  <h4 className="font-medium mb-2">注目される話題</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {analytics.predictions.emergingTopics.map((topic: string, index: number) => (
+                      <Badge key={index} variant="secondary" className="bg-blue-50 text-blue-700">{topic}</Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {analytics.predictions?.potentialIssues?.length > 0 && (
+                <div>
+                  <h4 className="font-medium mb-2 text-amber-600">潜在的な問題</h4>
+                  <ul className="text-sm text-muted-foreground space-y-1">
+                    {analytics.predictions.potentialIssues.map((issue: string, index: number) => (
+                      <li key={index} className="flex items-start gap-2">
+                        <span className="text-amber-500">⚠️</span>
+                        {issue}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
+              {analytics.predictions?.priorityActions?.length > 0 && (
+                <div>
+                  <h4 className="font-medium mb-2 text-green-600">優先アクション</h4>
+                  <ul className="text-sm text-muted-foreground space-y-1">
+                    {analytics.predictions.priorityActions.map((action: string, index: number) => (
+                      <li key={index} className="flex items-start gap-2">
+                        <span className="text-green-500">🎯</span>
+                        {action}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Overall Insights */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                💡 総合インサイト
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {analytics.overallInsights && (
+                <div>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{analytics.overallInsights}</p>
+                </div>
+              )}
+              
+              {analytics.actionItems?.length > 0 && (
+                <div>
+                  <h4 className="font-medium mb-2">具体的な改善アクション</h4>
+                  <div className="space-y-2">
+                    {analytics.actionItems.map((action: string, index: number) => (
+                      <div key={index} className="flex items-start gap-3 p-3 bg-primary/5 rounded-lg border border-primary/20">
+                        <span className="text-primary font-medium text-sm">#{index + 1}</span>
+                        <p className="text-sm flex-1">{action}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       <Card>
@@ -366,56 +653,111 @@ function App() {
     setChatInput('')
 
     try {
-      // より詳細で構造化されたプロンプト
+      // Get conversation history for context
+      const recentHistory = chatMessages.slice(-6).map(msg => 
+        `${msg.type === 'user' ? 'ユーザー' : 'AI'}: ${msg.content}`
+      ).join('\n')
+
+      // Enhanced personality instructions with context awareness
       const personalityInstructions = {
-        professional: '簡潔で業務的な回答を心がけ、必要な情報を効率的に提供してください。',
-        friendly: '親しみやすく丁寧な口調で、相手の立場に立った温かい回答を提供してください。',
-        detailed: '詳細な説明と背景情報を含め、関連する規則や手続きも合わせて包括的に回答してください。'
+        professional: '簡潔で業務的な回答を心がけ、要点を整理して効率的に情報を提供してください。箇条書きや番号付きリストを活用し、実践的なアドバイスを含めてください。',
+        friendly: '親しみやすく丁寧な口調で、相手の立場に立った温かい回答を提供してください。共感を示し、具体例を交えて分かりやすく説明してください。',
+        detailed: '詳細な説明と背景情報を含め、関連する規則や手続きを包括的に解説してください。法的根拠や実務上の注意点も合わせて提供し、深い理解を促してください。'
+      }
+
+      // Build enhanced company context
+      const companyContext = {
+        policies: publishedRules.map(rule => ({
+          category: rule.category,
+          title: rule.title,
+          content: rule.content,
+          lastUpdated: rule.lastUpdated
+        })),
+        faqs: faqs.map(faq => ({
+          category: faq.category,
+          question: faq.question,
+          answer: faq.answer
+        })),
+        categories: [...new Set(publishedRules.map(rule => rule.category))],
+        totalRules: publishedRules.length
       }
 
       const prompt = spark.llmPrompt`
-        あなたは日本の会社の専門的な人事AI「社則AI」です。以下の役割と規則に基づいて回答してください。
+        あなたは「社則AI」という高度な企業人事システムのAIアシスタントです。以下の詳細な会社情報と専門知識を基に、最も有用で正確な回答を提供してください。
 
-        ## あなたの役割
-        - 会社規則の専門家として、正確で実用的な回答を提供
-        - 法的観点や実務的な観点も含めた包括的なアドバイス
-        - 必要に応じて関連する規則や手続きも提案
-        
-        ## 回答スタイル
+        ## システム情報
+        - システム名: 社則AI (Company Rules AI Assistant)
+        - 役割: 企業規則・人事制度の専門アドバイザー
+        - 対応言語: 日本語
+        - 専門分野: 労務管理、人事制度、法的コンプライアンス
+
+        ## 回答スタイル設定
         ${personalityInstructions[chatPersonality]}
-        
-        ## 利用可能な情報
-        
-        ### 会社規則データベース:
-        ${publishedRules.map(rule => `
-        【${rule.category}】${rule.title}
-        内容: ${rule.content}
+
+        ## 会話履歴（文脈理解用）
+        ${recentHistory ? `過去の会話:\n${recentHistory}\n` : ''}
+
+        ## 包括的な会社データベース
+
+        ### 📋 現在の会社規則 (${companyContext.totalRules}件)
+        ${companyContext.policies.map(rule => `
+        ▼ カテゴリ: ${rule.category}
+        規則名: ${rule.title}
+        詳細内容: ${rule.content}
         最終更新: ${rule.lastUpdated}
+        ────────────────
         `).join('\n')}
 
-        ### よくある質問データベース:
-        ${faqs.map(faq => `
-        カテゴリ: ${faq.category}
-        Q: ${faq.question}
-        A: ${faq.answer}
+        ### ❓ FAQ データベース
+        ${companyContext.faqs.map(faq => `
+        [${faq.category}] ${faq.question}
+        回答: ${faq.answer}
+        ────────────────
         `).join('\n')}
 
-        ## ユーザー情報
-        - 権限レベル: ${currentUser.role === 'admin' ? '管理者' : currentUser.role === 'hr' ? '人事部' : '一般社員'}
-        - ユーザー名: ${currentUser.name}
+        ### 📊 規則カテゴリ一覧
+        利用可能なカテゴリ: ${companyContext.categories.join(', ')}
 
-        ## 質問
-        ${currentInput}
+        ## ユーザープロファイル
+        - 権限レベル: ${currentUser.role === 'admin' ? '管理者（全権限）' : currentUser.role === 'hr' ? '人事部（規則管理・承認権限）' : '一般社員（閲覧・質問権限）'}
+        - 識別名: ${currentUser.name}
+        - メールアドレス: ${currentUser.email}
 
-        ## 回答指針
-        1. 該当する規則が存在する場合は、具体的な規則名と内容を引用
-        2. 複数の関連規則がある場合は、すべてを整理して提示
-        3. 規則に記載がない場合は、一般的なガイダンスを提供
-        4. 必要に応じて、関連する手続きや連絡先も案内
-        5. 回答は構造化され、読みやすい形式で提供
-        6. 法的な注意事項がある場合は明記
+        ## 現在の質問
+        「${currentInput}」
 
-        日本語で丁寧かつ専門的に回答してください。
+        ## 高度な回答指針
+
+        ### 1. 情報分析と関連性評価
+        - 質問内容を詳細に分析し、関連する規則を包括的に特定
+        - 直接的な関連規則だけでなく、間接的に影響する可能性のある規則も考慮
+        - FAQとの関連性も評価し、既存の回答パターンを参考にする
+
+        ### 2. 構造化された回答提供
+        - **該当規則**: 具体的な規則名と内容を正確に引用
+        - **実務的な解釈**: 規則の実際の運用における意味を説明
+        - **手続きガイダンス**: 必要な手続きや連絡先を具体的に案内
+        - **関連情報**: 併せて知っておくべき関連規則や注意事項
+        - **例外・特記事項**: 特殊なケースや例外的な取り扱いがある場合は明記
+
+        ### 3. 権限レベル別対応
+        - 一般社員: 基本的な情報と手続き方法を中心に案内
+        - 人事部: 管理・運用の観点からより詳細な情報を提供
+        - 管理者: 制度設計や法的背景も含む包括的な情報を提供
+
+        ### 4. 品質保証
+        - 情報の正確性を最優先とし、推測や憶測は避ける
+        - 規則に明記されていない内容は一般的なガイダンスとして区別して提示
+        - 法的な専門性が必要な場合は適切な専門機関への相談を推奨
+        - 緊急性や重要度に応じて適切な連絡先や対応方法を案内
+
+        ### 5. ユーザビリティ向上
+        - 読みやすい形式（見出し、箇条書き、番号付きリスト）を活用
+        - 絵文字や記号を適度に使用して視認性を向上
+        - 専門用語は必要に応じて分かりやすく解説
+        - 次のアクションが明確になるよう具体的な指示を含める
+
+        上記の方針に従い、最も価値のある専門的な回答を日本語で提供してください。
       `
 
       const response = await spark.llm(prompt, 'gpt-4o')
@@ -569,19 +911,38 @@ function App() {
     }
 
     try {
+      // Get recent conversation context
+      const recentContext = chatMessages.slice(-4).map(msg => 
+        `${msg.type}: ${msg.content}`
+      ).join('\n')
+
       const prompt = spark.llmPrompt`
-        以下の会社規則データベースを基に、ユーザーの入力「${input}」に関連する質問候補を3つ提案してください。
+        現在のユーザー入力「${input}」と以下の情報を基に、最も有用な質問候補を提案してください。
 
-        規則データベース:
-        ${publishedRules.map(rule => `${rule.title}: ${rule.content}`).join('\n')}
+        ## 会社規則データベース:
+        ${publishedRules.map(rule => `[${rule.category}] ${rule.title}: ${rule.content.substring(0, 100)}...`).join('\n')}
 
-        FAQ:
-        ${faqs.map(faq => faq.question).join('\n')}
+        ## FAQ例:
+        ${faqs.map(faq => `Q: ${faq.question}`).join('\n')}
 
-        要件:
-        - 入力に関連する具体的で実用的な質問
-        - 1つの質問は20文字以内
-        - JSON配列形式で回答: ["質問1", "質問2", "質問3"]
+        ## 最近の会話履歴:
+        ${recentContext}
+
+        ## ユーザープロファイル:
+        - 権限: ${currentUser?.role === 'admin' ? '管理者' : currentUser?.role === 'hr' ? '人事部' : '一般社員'}
+        - 名前: ${currentUser?.name}
+
+        ## 提案要件:
+        1. ユーザーの入力に直接関連する質問
+        2. 現在の会話の文脈を考慮した発展的な質問
+        3. ユーザーの権限レベルに適した質問
+        4. 実務的で具体的な質問
+        5. 各質問は25文字以内で簡潔に
+
+        ## 出力形式:
+        JSON配列: ["具体的質問1", "関連質問2", "発展的質問3"]
+
+        最も価値のある3つの質問候補を提案してください。
       `
 
       const response = await spark.llm(prompt, 'gpt-4o-mini', true)
@@ -605,19 +966,35 @@ function App() {
         `${msg.type === 'user' ? 'ユーザー' : 'AI'}: ${msg.content}`
       ).join('\n')
 
-      const prompt = spark.llmPrompt`
-        以下の会話を要約し、主要なポイントを整理してください:
+      const userInfo = `${currentUser?.name} (${currentUser?.role === 'admin' ? '管理者' : currentUser?.role === 'hr' ? '人事部' : '一般社員'})`
 
+      const prompt = spark.llmPrompt`
+        以下の社則AIとの会話を専門的に要約し、実務的な価値を提供してください:
+
+        ## 会話履歴:
         ${conversation}
 
-        要約は以下の形式で:
-        - 質問の内容
-        - 提供された情報
-        - 関連する規則
-        - 今後のアクション（該当する場合）
+        ## ユーザー情報:
+        ${userInfo}
+
+        ## 現在の会社規則 (参考):
+        ${publishedRules.map(rule => `[${rule.category}] ${rule.title}`).join('\n')}
+
+        ## 要約要件:
+        1. **主要な質問内容** - 何について聞かれたか
+        2. **提供された情報** - どの規則・制度が説明されたか
+        3. **関連規則・制度** - 言及された具体的な規則名
+        4. **実務的なアドバイス** - 具体的な手続きや注意点
+        5. **今後のアクション** - ユーザーが取るべき次のステップ
+        6. **追加の検討事項** - 関連して確認すべき事項
+        7. **重要なポイント** - 特に記憶すべき要点
+
+        ## 出力形式:
+        構造化されたMarkdown形式で、実務担当者が後で参照しやすい形式で要約してください。
+        各セクションは明確に分けて、具体的で実行可能な情報を含めてください。
       `
 
-      const summary = await spark.llm(prompt, 'gpt-4o-mini')
+      const summary = await spark.llm(prompt, 'gpt-4o')
       
       const summaryMessage: ChatMessage = {
         id: Date.now().toString(),
@@ -627,8 +1004,22 @@ function App() {
       }
 
       setChatMessages(current => [...current, summaryMessage])
-      toast.success('会話を要約しました')
+      
+      // 要約をログとして保存
+      const summaryLog = {
+        userId: currentUser?.email || 'unknown',
+        type: 'conversation_summary',
+        content: summary,
+        timestamp: new Date().toISOString(),
+        messageCount: chatMessages.length
+      }
+      
+      const logs = await spark.kv.get<any[]>('ai-interaction-logs') || []
+      await spark.kv.set('ai-interaction-logs', [...logs.slice(-99), summaryLog])
+      
+      toast.success('会話を詳細に要約しました')
     } catch (error) {
+      console.error('Summary generation error:', error)
       toast.error('要約の生成に失敗しました')
     }
   }
@@ -647,6 +1038,48 @@ function App() {
   const handleLogin = (user: UserInfo) => {
     setCurrentUser(user)
     toast.success(`${user.name}としてログインしました`)
+  }
+
+  // Export conversation insights for analysis
+  const exportConversationData = async () => {
+    try {
+      const logs = await spark.kv.get<any[]>('ai-interaction-logs') || []
+      const conversations = await spark.kv.get<ChatMessage[]>('chat-history') || []
+      
+      const exportData = {
+        timestamp: new Date().toISOString(),
+        user: currentUser?.name,
+        stats: {
+          totalQuestions: logs.length,
+          totalConversations: conversations.length,
+          averageResponseLength: logs.length > 0 ? Math.round(logs.reduce((sum, log) => sum + log.responseLength, 0) / logs.length) : 0,
+          activeUsers: [...new Set(logs.map(log => log.userId))].length
+        },
+        recentLogs: logs.slice(-50),
+        currentRules: publishedRules.map(rule => ({
+          title: rule.title,
+          category: rule.category,
+          lastUpdated: rule.lastUpdated
+        }))
+      }
+      
+      const dataStr = JSON.stringify(exportData, null, 2)
+      const blob = new Blob([dataStr], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `company-rules-ai-insights-${new Date().toISOString().split('T')[0]}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      
+      toast.success('データをエクスポートしました')
+    } catch (error) {
+      console.error('Export error:', error)
+      toast.error('エクスポートに失敗しました')
+    }
   }
 
   return (
@@ -781,6 +1214,9 @@ function App() {
                       </CardTitle>
                       <CardDescription>
                         会社の規則について質問してください。AIが適切な回答を提供します。
+                        <span className="block text-xs mt-1 text-primary">
+                          📚 現在{publishedRules.length}件の規則と{faqs.length}件のFAQを参照可能
+                        </span>
                       </CardDescription>
                     </div>
                     <div className="flex items-center gap-2">
@@ -1220,7 +1656,7 @@ function App() {
 
                     {currentUser?.role === 'admin' && (
                       <TabsContent value="insights" className="space-y-4 mt-6">
-                        <AIInsightsPanel />
+                        <AIInsightsPanel exportConversationData={exportConversationData} />
                       </TabsContent>
                     )}
                   </Tabs>
