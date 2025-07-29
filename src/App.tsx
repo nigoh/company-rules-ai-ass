@@ -65,19 +65,17 @@ function App() {
       lastUpdated: '2024-01-10',
       status: 'published'
     },
-    {
       id: '3',
-      title: '服装規定',
+      id: '3',
       content: 'ビジネスカジュアルを基本とします。お客様との面談がある日はスーツ着用を推奨します。安全上の理由から、サンダルでの勤務は禁止です。',
       category: '服装',
       lastUpdated: '2024-01-05',
       status: 'published'
-    }
   ])
+    }
+  const [faqs] = useKV<FAQ[]>('company-faqs', [
 
   const [faqs] = useKV<FAQ[]>('company-faqs', [
-    {
-      id: '1',
       question: '残業代はどのように計算されますか？',
       answer: '法定時間外労働に対して25%の割増賃金を支給します。深夜労働（22:00-5:00）は35%割増となります。',
       category: '給与'
