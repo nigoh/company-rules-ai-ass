@@ -7,11 +7,13 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import { useKV } from '@github/spark/hooks'
-import { Search, MessageCircle, Book, Settings, User, Plus, Edit2, Trash2, Send, SignIn, Check, X, Clock, Eye, UserCheck, Sparkle, FileText, Lightbulb } from '@phosphor-icons/react'
+import { Search, MessageCircle, Book, Settings, User, Plus, Edit2, Trash2, Send, SignIn, Check, X, Clock, Eye, UserCheck, Sparkle, FileText, Lightbulb, Database, Cpu } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { LoginDialog } from '@/components/auth/LoginDialog'
 import { UserProfile } from '@/components/auth/UserProfile'
 import { ProtectedRoute, usePermissions } from '@/components/auth/ProtectedRoute'
+import { openaiService } from '@/services/openai'
+import { databaseService } from '@/services/database'
 
 interface Rule {
   id: string
@@ -598,16 +600,16 @@ function App() {
   const [editingRule, setEditingRule] = useState<Rule | null>(null)
   const [newRule, setNewRule] = useState({ title: '', content: '', category: '' })
   const [showLoginDialog, setShowLoginDialog] = useState(false)
-  const [activeAdminTab, setActiveAdminTab] = useState<'add' | 'manage' | 'pending' | 'insights'>('add')
+  const [activeAdminTab, setActiveAdminTab] = useState<'add' | 'manage' | 'pending' | 'insights' | 'ai-tools' | 'database'>('add')
   const [reviewComment, setReviewComment] = useState('')
   const [aiSuggestions, setAiSuggestions] = useState<string[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [chatPersonality, setChatPersonality] = useKV<'professional' | 'friendly' | 'detailed'>('ai-personality', 'professional')
 
-  // Reset admin tab for HR users who don't have access to pending/insights
+  // Reset admin tab for HR users who don't have access to certain tabs
   const handleAdminTabChange = (value: string) => {
-    if ((value === 'pending' || value === 'insights') && currentUser?.role !== 'admin') {
-      return // Don't allow HR users to access pending/insights tabs
+    if ((value === 'pending' || value === 'insights' || value === 'ai-tools' || value === 'database') && currentUser?.role !== 'admin') {
+      return // Don't allow HR users to access admin-only tabs
     }
     setActiveAdminTab(value as any)
   }
@@ -904,7 +906,7 @@ function App() {
     toast.success('規則を却下しました')
   }
 
-  // AI提案機能 - 入力に基づいて関連質問を提案
+  // AI提案機能 - OpenAIサービスを使用した改善版
   const generateSuggestions = async (input: string) => {
     if (input.length < 3) {
       setAiSuggestions([])
@@ -913,45 +915,15 @@ function App() {
     }
 
     try {
-      // Get recent conversation context
-      const recentContext = chatMessages.slice(-4).map(msg => 
-        `${msg.type}: ${msg.content}`
-      ).join('\n')
-
-      const prompt = spark.llmPrompt`
-        現在のユーザー入力「${input}」と以下の情報を基に、最も有用な質問候補を提案してください。
-
-        ## 会社規則データベース:
-        ${publishedRules.map(rule => `[${rule.category}] ${rule.title}: ${rule.content.substring(0, 100)}...`).join('\n')}
-
-        ## FAQ例:
-        ${faqs.map(faq => `Q: ${faq.question}`).join('\n')}
-
-        ## 最近の会話履歴:
-        ${recentContext}
-
-        ## ユーザープロファイル:
-        - 権限: ${currentUser?.role === 'admin' ? '管理者' : currentUser?.role === 'hr' ? '人事部' : '一般社員'}
-        - 名前: ${currentUser?.name}
-
-        ## 提案要件:
-        1. ユーザーの入力に直接関連する質問
-        2. 現在の会話の文脈を考慮した発展的な質問
-        3. ユーザーの権限レベルに適した質問
-        4. 実務的で具体的な質問
-        5. 各質問は25文字以内で簡潔に
-
-        ## 出力形式:
-        JSON配列: ["具体的質問1", "関連質問2", "発展的質問3"]
-
-        最も価値のある3つの質問候補を提案してください。
-      `
-
-      const response = await spark.llm(prompt, 'gpt-4o-mini', true)
-      const suggestions = JSON.parse(response)
+      const suggestions = await openaiService.generateQuestionSuggestions(
+        input,
+        chatMessages,
+        currentUser || { role: 'employee', name: 'Guest', email: 'guest@example.com' },
+        publishedRules
+      )
       
-      if (Array.isArray(suggestions) && suggestions.length > 0) {
-        setAiSuggestions(suggestions.slice(0, 3))
+      if (suggestions.length > 0) {
+        setAiSuggestions(suggestions)
         setShowSuggestions(true)
       }
     } catch (error) {
@@ -1029,6 +1001,7 @@ function App() {
   const handleLogout = () => {
     setCurrentUser(null)
     setChatMessages([])
+    setShowLoginDialog(true) // ログアウト時にログイン画面を表示
     toast.success('ログアウトしました')
   }
 
@@ -1037,9 +1010,49 @@ function App() {
     toast.success('規則を削除しました')
   }
 
-  const handleLogin = (user: UserInfo) => {
-    setCurrentUser(user)
-    toast.success(`${user.name}としてログインしました`)
+  // AI規則分析機能
+  const analyzeRule = async (rule: Rule) => {
+    try {
+      const analysis = await openaiService.analyzeRule(
+        {
+          title: rule.title,
+          content: rule.content,
+          category: rule.category
+        },
+        publishedRules
+      )
+      
+      toast.success('規則分析が完了しました')
+      
+      // 分析結果を表示するための状態を更新
+      // この部分は実際のUI実装に応じて調整
+      console.log('Rule Analysis:', analysis)
+      
+    } catch (error) {
+      console.error('Rule analysis error:', error)
+      toast.error('規則分析に失敗しました')
+    }
+  }
+
+  // データベース状態確認
+  const checkDatabaseStatus = async () => {
+    try {
+      const exportData = await databaseService.exportAllData()
+      const stats = {
+        rules: exportData.rules.length,
+        users: exportData.users.length,
+        conversations: exportData.conversations.length,
+        messages: exportData.messages.length,
+        logs: exportData.logs.length
+      }
+      
+      toast.success(`データベース確認完了: 規則${stats.rules}件、ユーザー${stats.users}人、会話${stats.conversations}件`)
+      return stats
+    } catch (error) {
+      console.error('Database check error:', error)
+      toast.error('データベース状態確認に失敗しました')
+      return null
+    }
   }
 
   // Export conversation insights for analysis
@@ -1419,7 +1432,7 @@ function App() {
                 </CardHeader>
                 <CardContent>
                   <Tabs value={activeAdminTab} onValueChange={handleAdminTabChange}>
-                    <TabsList className={`grid w-full ${currentUser?.role === 'admin' ? 'grid-cols-4' : 'grid-cols-2'}`}>
+                    <TabsList className={`grid w-full ${currentUser?.role === 'admin' ? 'grid-cols-6' : 'grid-cols-2'}`}>
                       <TabsTrigger value="add" className="flex items-center gap-2">
                         <Plus size={16} />
                         新規作成
@@ -1442,6 +1455,14 @@ function App() {
                           <TabsTrigger value="insights" className="flex items-center gap-2">
                             <Sparkle size={16} />
                             AIインサイト
+                          </TabsTrigger>
+                          <TabsTrigger value="ai-tools" className="flex items-center gap-2">
+                            <Cpu size={16} />
+                            AIツール
+                          </TabsTrigger>
+                          <TabsTrigger value="database" className="flex items-center gap-2">
+                            <Database size={16} />
+                            データベース
                           </TabsTrigger>
                         </>
                       )}
@@ -1659,6 +1680,284 @@ function App() {
                     {currentUser?.role === 'admin' && (
                       <TabsContent value="insights" className="space-y-4 mt-6">
                         <AIInsightsPanel exportConversationData={exportConversationData} />
+                      </TabsContent>
+                    )}
+
+                    {currentUser?.role === 'admin' && (
+                      <TabsContent value="ai-tools" className="space-y-4 mt-6">
+                        <div className="space-y-6">
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-lg font-medium">AIツール</h3>
+                            <Badge variant="outline" className="text-xs">
+                              OpenAI統合サービス
+                            </Badge>
+                          </div>
+
+                          <div className="grid gap-4 md:grid-cols-2">
+                            <Card>
+                              <CardHeader>
+                                <CardTitle className="text-base flex items-center gap-2">
+                                  <Sparkle size={20} className="text-primary" />
+                                  規則分析ツール
+                                </CardTitle>
+                                <CardDescription>
+                                  個別の規則を詳細分析し、改善提案を生成します
+                                </CardDescription>
+                              </CardHeader>
+                              <CardContent className="space-y-4">
+                                <select 
+                                  className="w-full px-3 py-2 border border-input rounded-md bg-background"
+                                  onChange={(e) => {
+                                    const rule = publishedRules.find(r => r.id === e.target.value)
+                                    if (rule) analyzeRule(rule)
+                                  }}
+                                  defaultValue=""
+                                >
+                                  <option value="">分析する規則を選択</option>
+                                  {publishedRules.map(rule => (
+                                    <option key={rule.id} value={rule.id}>
+                                      [{rule.category}] {rule.title}
+                                    </option>
+                                  ))}
+                                </select>
+                                <p className="text-xs text-muted-foreground">
+                                  規則の明確性、完全性、一貫性を評価し、具体的な改善提案を提供します。
+                                </p>
+                              </CardContent>
+                            </Card>
+
+                            <Card>
+                              <CardHeader>
+                                <CardTitle className="text-base flex items-center gap-2">
+                                  <Lightbulb size={20} className="text-primary" />
+                                  ポリシーギャップ分析
+                                </CardTitle>
+                                <CardDescription>
+                                  規則の不足領域を特定し、新規則の優先順位を提案
+                                </CardDescription>
+                              </CardHeader>
+                              <CardContent className="space-y-4">
+                                <Button 
+                                  onClick={async () => {
+                                    try {
+                                      const logs = await spark.kv.get<any[]>('ai-interaction-logs') || []
+                                      const analysis = await openaiService.analyzePolicyGaps(
+                                        publishedRules,
+                                        logs
+                                      )
+                                      toast.success('ポリシーギャップ分析が完了しました')
+                                      console.log('Policy Gap Analysis:', analysis)
+                                    } catch (error) {
+                                      toast.error('ギャップ分析に失敗しました')
+                                    }
+                                  }}
+                                  className="w-full"
+                                  variant="outline"
+                                >
+                                  <Cpu size={16} className="mr-2" />
+                                  ギャップ分析実行
+                                </Button>
+                                <p className="text-xs text-muted-foreground">
+                                  質問履歴と現在の規則を分析し、不足している規則領域を特定します。
+                                </p>
+                              </CardContent>
+                            </Card>
+
+                            <Card>
+                              <CardHeader>
+                                <CardTitle className="text-base flex items-center gap-2">
+                                  <User size={20} className="text-primary" />
+                                  ユーザー行動分析
+                                </CardTitle>
+                                <CardDescription>
+                                  利用パターンとユーザー満足度を分析
+                                </CardDescription>
+                              </CardHeader>
+                              <CardContent className="space-y-4">
+                                <Button 
+                                  onClick={async () => {
+                                    try {
+                                      const logs = await spark.kv.get<any[]>('ai-interaction-logs') || []
+                                      const analysis = await openaiService.analyzeUserBehavior(logs)
+                                      toast.success('ユーザー行動分析が完了しました')
+                                      console.log('User Behavior Analysis:', analysis)
+                                    } catch (error) {
+                                      toast.error('行動分析に失敗しました')
+                                    }
+                                  }}
+                                  className="w-full"
+                                  variant="outline"
+                                >
+                                  <Sparkle size={16} className="mr-2" />
+                                  行動分析実行
+                                </Button>
+                                <p className="text-xs text-muted-foreground">
+                                  質問パターン、エンゲージメント、満足度を詳細分析します。
+                                </p>
+                              </CardContent>
+                            </Card>
+
+                            <Card>
+                              <CardHeader>
+                                <CardTitle className="text-base flex items-center gap-2">
+                                  <Settings size={20} className="text-primary" />
+                                  AI設定
+                                </CardTitle>
+                                <CardDescription>
+                                  OpenAIサービスの設定と監視
+                                </CardDescription>
+                              </CardHeader>
+                              <CardContent className="space-y-4">
+                                <div className="space-y-2">
+                                  <label className="text-sm font-medium">デフォルトモデル</label>
+                                  <select className="w-full px-3 py-2 border border-input rounded-md bg-background">
+                                    <option value="gpt-4o">GPT-4o (推奨)</option>
+                                    <option value="gpt-4o-mini">GPT-4o Mini (高速)</option>
+                                  </select>
+                                </div>
+                                <div className="space-y-2">
+                                  <label className="text-sm font-medium">応答スタイル</label>
+                                  <select className="w-full px-3 py-2 border border-input rounded-md bg-background">
+                                    <option value="professional">業務的</option>
+                                    <option value="friendly">親しみやすい</option>
+                                    <option value="detailed">詳細</option>
+                                  </select>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          </div>
+                        </div>
+                      </TabsContent>
+                    )}
+
+                    {currentUser?.role === 'admin' && (
+                      <TabsContent value="database" className="space-y-4 mt-6">
+                        <div className="space-y-6">
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-lg font-medium">データベース管理</h3>
+                            <Badge variant="outline" className="text-xs">
+                              Spark KV Store
+                            </Badge>
+                          </div>
+
+                          <div className="grid gap-4 md:grid-cols-2">
+                            <Card>
+                              <CardHeader>
+                                <CardTitle className="text-base flex items-center gap-2">
+                                  <Database size={20} className="text-primary" />
+                                  データベース状態
+                                </CardTitle>
+                                <CardDescription>
+                                  現在のデータ容量と統計情報
+                                </CardDescription>
+                              </CardHeader>
+                              <CardContent className="space-y-4">
+                                <Button 
+                                  onClick={checkDatabaseStatus}
+                                  className="w-full"
+                                  variant="outline"
+                                >
+                                  <Database size={16} className="mr-2" />
+                                  状態確認
+                                </Button>
+                                <div className="text-xs text-muted-foreground space-y-1">
+                                  <p>• 規則: {rules.length}件</p>
+                                  <p>• チャット履歴: {chatMessages.length}件</p>
+                                  <p>• FAQ: {faqs.length}件</p>
+                                </div>
+                              </CardContent>
+                            </Card>
+
+                            <Card>
+                              <CardHeader>
+                                <CardTitle className="text-base flex items-center gap-2">
+                                  <FileText size={20} className="text-primary" />
+                                  データエクスポート
+                                </CardTitle>
+                                <CardDescription>
+                                  全データの一括エクスポート機能
+                                </CardDescription>
+                              </CardHeader>
+                              <CardContent className="space-y-4">
+                                <Button 
+                                  onClick={async () => {
+                                    try {
+                                      const exportData = await databaseService.exportAllData()
+                                      const dataStr = JSON.stringify(exportData, null, 2)
+                                      const blob = new Blob([dataStr], { type: 'application/json' })
+                                      const url = URL.createObjectURL(blob)
+                                      
+                                      const a = document.createElement('a')
+                                      a.href = url
+                                      a.download = `company-rules-backup-${new Date().toISOString().split('T')[0]}.json`
+                                      document.body.appendChild(a)
+                                      a.click()
+                                      document.body.removeChild(a)
+                                      URL.revokeObjectURL(url)
+                                      
+                                      toast.success('データをエクスポートしました')
+                                    } catch (error) {
+                                      toast.error('エクスポートに失敗しました')
+                                    }
+                                  }}
+                                  className="w-full"
+                                  variant="outline"
+                                >
+                                  <FileText size={16} className="mr-2" />
+                                  全データエクスポート
+                                </Button>
+                                <p className="text-xs text-muted-foreground">
+                                  全データをJSON形式でダウンロードします。
+                                </p>
+                              </CardContent>
+                            </Card>
+
+                            <Card className="md:col-span-2">
+                              <CardHeader>
+                                <CardTitle className="text-base flex items-center gap-2">
+                                  <Settings size={20} className="text-primary" />
+                                  データベース推奨事項
+                                </CardTitle>
+                                <CardDescription>
+                                  将来の拡張性を考慮した推奨データベース選択肢
+                                </CardDescription>
+                              </CardHeader>
+                              <CardContent className="space-y-4">
+                                <div className="grid gap-3 md:grid-cols-3">
+                                  <div className="p-3 border rounded-lg">
+                                    <h4 className="font-medium text-sm mb-2">小〜中規模</h4>
+                                    <p className="text-xs text-muted-foreground mb-2">従業員数 50-500名</p>
+                                    <Badge variant="secondary" className="text-xs">PostgreSQL + Prisma</Badge>
+                                    <p className="text-xs mt-2 text-muted-foreground">
+                                      成熟したRDBMS、優れたJSONサポート
+                                    </p>
+                                  </div>
+                                  <div className="p-3 border rounded-lg">
+                                    <h4 className="font-medium text-sm mb-2">中〜大規模</h4>
+                                    <p className="text-xs text-muted-foreground mb-2">従業員数 500-5000名</p>
+                                    <Badge variant="secondary" className="text-xs">MongoDB Atlas</Badge>
+                                    <p className="text-xs mt-2 text-muted-foreground">
+                                      柔軟なスキーマ、優れたスケーラビリティ
+                                    </p>
+                                  </div>
+                                  <div className="p-3 border rounded-lg">
+                                    <h4 className="font-medium text-sm mb-2">大規模企業</h4>
+                                    <p className="text-xs text-muted-foreground mb-2">従業員数 5000名以上</p>
+                                    <Badge variant="secondary" className="text-xs">Multi-Database</Badge>
+                                    <p className="text-xs mt-2 text-muted-foreground">
+                                      PostgreSQL + Elasticsearch + Redis
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="mt-4 p-3 bg-secondary/50 rounded-lg">
+                                  <p className="text-xs text-muted-foreground">
+                                    📄 詳細な推奨事項は <code>/docs/database-recommendations.md</code> をご確認ください。
+                                  </p>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          </div>
+                        </div>
                       </TabsContent>
                     )}
                   </Tabs>
