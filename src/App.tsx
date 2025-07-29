@@ -366,111 +366,113 @@ function AIInsightsPanel({ exportConversationData }: { exportConversationData: (
                     ))}
                   </div>
                 </div>
-      // Get conversation history for context
-      const recentHistory = chatMessages.slice(-6).map(msg => 
-        `${msg.type === 'user' ? 'ユーザー' : 'AI'}: ${msg.content}`
-      ).join('\n')
-
-      // Enhanced personality instructions with context awareness
-                </div>
-        professional: '簡潔で業務的な回答を心がけ、要点を整理して効率的に情報を提供してください。箇条書きや番号付きリストを活用し、実践的なアドバイスを含めてください。',
-        friendly: '親しみやすく丁寧な口調で、相手の立場に立った温かい回答を提供してください。共感を示し、具体例を交えて分かりやすく説明してください。',
-        detailed: '詳細な説明と背景情報を含め、関連する規則や手続きを包括的に解説してください。法的根拠や実務上の注意点も合わせて提供し、深い理解を促してください。'
-
-          {/* Efficiency Recommendations */}
-      // Build enhanced company context
-      const companyContext = {
-        policies: publishedRules.map(rule => ({
-          category: rule.category,
-          title: rule.title,
-          content: rule.content,
-          lastUpdated: rule.lastUpdated
-        })),
-        faqs: faqs.map(faq => ({
-          category: faq.category,
-          question: faq.question,
-          answer: faq.answer
-        })),
-        categories: [...new Set(publishedRules.map(rule => rule.category))],
-        totalRules: publishedRules.length
-      }
-
-                            className="text-xs"
-        あなたは「社則AI」という高度な企業人事システムのAIアシスタントです。以下の詳細な会社情報と専門知識を基に、最も有用で正確な回答を提供してください。
-                            {faq.priority}
-        ## システム情報
-        - システム名: 社則AI (Company Rules AI Assistant)
-        - 役割: 企業規則・人事制度の専門アドバイザー/p>
-        - 対応言語: 日本語
-        - 専門分野: 労務管理、人事制度、法的コンプライアンス
- </div>
-        ## 回答スタイル設定
-              )}
-      
-        ## 会話履歴（文脈理解用）eImprovements?.length > 0 && (
-        ${recentHistory ? `過去の会話:\n${recentHistory}\n` : ''}
-lassName="font-medium mb-2">規則改善提案</h4>
-        ## 包括的な会社データベースd space-y-1">
-cy.ruleImprovements.map((improvement: string, index: number) => (
-        ### 📋 現在の会社規則 (${companyContext.totalRules}件)
-        ${companyContext.policies.map(rule => `
-        ▼ カテゴリ: ${rule.category}
-        規則名: ${rule.title}
-        詳細内容: ${rule.content}
-                  </ul>
-        ────────────────
               )}
               
-        ### ❓ FAQ データベースs?.length > 0 && (
-        ${companyContext.faqs.map(faq => `
-        [${faq.category}] ${faq.question}
-        回答: ${faq.answer}-foreground space-y-1">
-        ────────────────ngNeeds.map((need: string, index: number) => (
+              {analytics.userBehavior?.comprehensionLevel && (
+                <div>
+                  <h4 className="font-medium mb-2">理解度評価</h4>
+                  <Badge variant="outline">{analytics.userBehavior.comprehensionLevel}</Badge>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Efficiency Recommendations */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                ⚡ 業務効率化提案
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {analytics.efficiency?.suggestedFAQs?.length > 0 && (
+                <div>
+                  <h4 className="font-medium mb-2 text-blue-600">推奨FAQ</h4>
+                  <div className="space-y-2">
+                    {analytics.efficiency.suggestedFAQs.map((faq: any, index: number) => (
+                      <div key={index} className="p-2 border rounded-lg bg-blue-50/50">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-medium text-sm">{faq.question}</span>
+                          <Badge 
+                            variant={faq.priority === '高' ? 'destructive' : faq.priority === '中' ? 'default' : 'secondary'}
+                            className="text-xs"
+                          >
+                            {faq.priority}
+                          </Badge>
+                        </div>
+                        <span className="text-xs text-muted-foreground">{faq.category}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {analytics.efficiency?.ruleImprovements?.length > 0 && (
+                <div>
+                  <h4 className="font-medium mb-2">規則改善提案</h4>
+                  <ul className="text-sm text-muted-foreground space-y-1">
+                    {analytics.efficiency.ruleImprovements.map((improvement: string, index: number) => (
+                      <li key={index} className="flex items-start gap-2">
+                        <span className="text-blue-500">🔧</span>
+                        {improvement}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
+              {analytics.efficiency?.trainingNeeds?.length > 0 && (
+                <div>
+                  <h4 className="font-medium mb-2">社員教育ニーズ</h4>
+                  <ul className="text-sm text-muted-foreground space-y-1">
+                    {analytics.efficiency.trainingNeeds.map((need: string, index: number) => (
                       <li key={index} className="flex items-start gap-2">
                         <span className="text-primary">🎓</span>
-        ### 📊 規則カテゴリ一覧
-        利用可能なカテゴリ: ${companyContext.categories.join(', ')}
+                        {need}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-        ## ユーザープロファイルl>
-        - 権限レベル: ${currentUser.role === 'admin' ? '管理者（全権限）' : currentUser.role === 'hr' ? '人事部（規則管理・承認権限）' : '一般社員（閲覧・質問権限）'}
-        - 識別名: ${currentUser.name}
-        - メールアドレス: ${currentUser.email}
-d>
-        ## 現在の質問
-        「${currentInput}」
-
-        ## 高度な回答指針
-me="text-base flex items-center gap-2">
-        ### 1. 情報分析と関連性評価
-        - 質問内容を詳細に分析し、関連する規則を包括的に特定
-        - 直接的な関連規則だけでなく、間接的に影響する可能性のある規則も考慮
-        - FAQとの関連性も評価し、既存の回答パターンを参考にする
-
-        ### 2. 構造化された回答提供
-        - **該当規則**: 具体的な規則名と内容を正確に引用
-        - **実務的な解釈**: 規則の実際の運用における意味を説明
-        - **手続きガイダンス**: 必要な手続きや連絡先を具体的に案内
-        - **関連情報**: 併せて知っておくべき関連規則や注意事項
-        - **例外・特記事項**: 特殊なケースや例外的な取り扱いがある場合は明記
-
-        ### 3. 権限レベル別対応
-        - 一般社員: 基本的な情報と手続き方法を中心に案内
-        - 人事部: 管理・運用の観点からより詳細な情報を提供
-        - 管理者: 制度設計や法的背景も含む包括的な情報を提供
-
-        ### 4. 品質保証
-        - 情報の正確性を最優先とし、推測や憶測は避ける
-        - 規則に明記されていない内容は一般的なガイダンスとして区別して提示
-        - 法的な専門性が必要な場合は適切な専門機関への相談を推奨
-        - 緊急性や重要度に応じて適切な連絡先や対応方法を案内
-
-        ### 5. ユーザビリティ向上
-        - 読みやすい形式（見出し、箇条書き、番号付きリスト）を活用
-        - 絵文字や記号を適度に使用して視認性を向上
-        - 専門用語は必要に応じて分かりやすく解説
-        - 次のアクションが明確になるよう具体的な指示を含める
-
-        上記の方針に従い、最も価値のある専門的な回答を日本語で提供してください。
+          {/* Predictions */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                🔮 予測的インサイト
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {analytics.predictions?.emergingTopics?.length > 0 && (
+                <div>
+                  <h4 className="font-medium mb-2 text-purple-600">注目される話題</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {analytics.predictions.emergingTopics.map((topic: string, index: number) => (
+                      <Badge key={index} variant="outline" className="text-purple-600 border-purple-200">
+                        {topic}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {analytics.predictions?.potentialIssues?.length > 0 && (
+                <div>
+                  <h4 className="font-medium mb-2 text-red-600">潜在的な問題</h4>
+                  <ul className="text-sm text-muted-foreground space-y-1">
+                    {analytics.predictions.potentialIssues.map((issue: string, index: number) => (
+                      <li key={index} className="flex items-start gap-2">
+                        <span className="text-red-500">⚠️</span>
+                        {issue}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
+              {analytics.predictions?.priorityActions?.length > 0 && (
                 <div>
                   <h4 className="font-medium mb-2 text-green-600">優先アクション</h4>
                   <ul className="text-sm text-muted-foreground space-y-1">
