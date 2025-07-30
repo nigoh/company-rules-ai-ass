@@ -36,7 +36,7 @@ export function ErrorFallback({ error, resetErrorBoundary }: ErrorFallbackProps)
           className="w-full"
         >
           <ArrowClockwise size={16} className="mr-2" />
-          アプリケーションを再読み込み
+          アプリケーションを再起動
         </Button>
       </div>
     </div>
