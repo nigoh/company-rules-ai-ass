@@ -12,6 +12,7 @@ import { toast } from 'sonner'
 import { LoginDialog } from '@/components/auth/LoginDialog'
 import { UserProfile } from '@/components/auth/UserProfile'
 import { ProtectedRoute, usePermissions } from '@/components/auth/ProtectedRoute'
+import { Logo, LogoIcon } from '@/components/Logo'
 import { openaiService } from '@/services/openai'
 import { databaseService } from '@/services/database'
 
@@ -1107,13 +1108,7 @@ function App() {
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-6 max-w-6xl">
         <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-3">
-            <Book size={32} weight="bold" className="text-primary" />
-            <div>
-              <h1 className="text-3xl font-bold text-foreground">社則AI</h1>
-              <p className="text-muted-foreground">Company Rules AI Assistant</p>
-            </div>
-          </div>
+          <Logo size={48} />
           
           <div className="flex items-center gap-3">
             {currentUser ? (
