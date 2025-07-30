@@ -32,9 +32,8 @@ export function ErrorFallback({ error, resetErrorBoundary }: ErrorFallbackProps)
         </div>
         
         <Button 
-          onClick={resetErrorBoundary} 
+          onClick={resetErrorBoundary}
           className="w-full"
-          variant="outline"
         >
           <ArrowClockwise size={16} className="mr-2" />
           アプリケーションを再読み込み
